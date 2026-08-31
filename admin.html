@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>器材借用系統｜管理員</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f5f6fa;color:#1a1a1a;font-size:14px}
+#nav{background:#1a1a2e;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:0}
+.logo{font-weight:700;font-size:15px;padding:14px 0;margin-right:16px;color:#fff}
+.nav-btn{padding:13px 11px;font-size:13px;color:#aaa;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;font-family:inherit;transition:color .15s,border-color .15s}
+.nav-btn:hover{color:#fff}.nav-btn.active{color:#fff;border-bottom-color:#4fc3f7;font-weight:500}
+#admin-badge{margin-left:auto;font-size:11px;background:#4fc3f7;color:#1a1a2e;padding:3px 10px;border-radius:20px;font-weight:700}
+.page{display:none;padding:20px;max-width:1200px;margin:0 auto}.page.active{display:block}
+.card{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:18px;margin-bottom:14px}
+.card-title{font-weight:600;font-size:14px;margin-bottom:12px;color:#374151}
+.badge{font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600;display:inline-block;white-space:nowrap}
+.badge-personal{background:#fce4ec;color:#880e4f}.badge-event{background:#e3f2fd;color:#0d47a1}
+.badge-task{background:#e8f5e9;color:#1b5e20}.badge-pending{background:#fff8e1;color:#f57f17;border:1px solid #ffe082}
+.badge-future{background:#f3e5f5;color:#6a1b9a}.badge-active{background:#fff3e0;color:#e65100}
+.badge-partial{background:#e8f5e9;color:#2e7d32}.badge-done{background:#f3f3f3;color:#555}
+.badge-overdue{background:#ffebee;color:#c62828}.badge-conflict{background:#fef9c3;color:#854d0e;border:1px solid #fde047}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:720px){.grid-2{grid-template-columns:1fr}}
+label{font-size:12px;color:#6b7280;display:block;margin-bottom:3px;margin-top:10px}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;background:#fff;color:#1a1a1a}
+input:focus,select:focus,textarea:focus{border-color:#3b82f6}
+.err{color:#dc2626;font-size:11px;margin-top:3px;display:none}
+.btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid #d1d5db;background:#fff;color:#374151;transition:all .15s;font-family:inherit}
+.btn:hover{background:#f9fafb;border-color:#9ca3af}
+.btn-primary{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.btn-primary:hover{background:#1e40af}
+.btn-sm{padding:3px 9px;font-size:12px}
+.btn-danger{color:#dc2626;border-color:#fca5a5}.btn-danger:hover{background:#fef2f2}
+.btn-success{background:#059669;color:#fff;border-color:#059669}.btn-success:hover{background:#047857}
+.btn-warn{background:#d97706;color:#fff;border-color:#d97706}.btn-warn:hover{background:#b45309}
+.btn-purple{background:#7c3aed;color:#fff;border-color:#7c3aed}.btn-purple:hover{background:#6d28d9}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:7px 9px;border-bottom:2px solid #e5e7eb;font-weight:600;color:#6b7280;white-space:nowrap;background:#f9fafb}
+td{padding:7px 9px;border-bottom:1px solid #f3f4f6;vertical-align:middle}
+tr:hover td{background:#fafafa}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid #e4e4e7;border-radius:9px;padding:12px;text-align:center}
+.stat-num{font-size:22px;font-weight:700}.stat-label{font-size:11px;color:#9ca3af;margin-top:2px}
+#login-overlay{position:fixed;inset:0;background:rgba(15,15,35,.85);display:flex;align-items:center;justify-content:center;z-index:999}
+#login-box{background:#fff;border-radius:14px;padding:30px;width:300px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.section-header h2{font-size:17px;font-weight:600}
+.token-bar{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin-left:4px}
+.token{width:12px;height:12px;border-radius:50%;border:2px solid #d1d5db;background:#fff;display:inline-block}
+.token.filled{background:#f59e0b;border-color:#f59e0b}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;padding:22px;width:580px;max-width:96vw;max-height:92vh;overflow-y:auto}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #f0f0f0}
+.cat-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.cat-tab{padding:4px 11px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-family:inherit;transition:all .15s}
+.cat-tab.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e}
+.flex{display:flex}.gap-6{gap:6px}.gap-8{gap:8px}.align-center{align-items:center}
+.text-muted{color:#9ca3af;font-size:12px}.text-sm{font-size:12px}
+.w-full{width:100%}.mt-8{margin-top:8px}.mt-12{margin-top:12px}
+.highlight{background:#fffbf0;border-color:#fcd34d}
+.search-box{padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;width:100%;margin-bottom:8px;outline:none;font-family:inherit}
+.search-box:focus{border-color:#3b82f6}
+.eq-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6}
+.eq-item:last-child{border-bottom:none}
+.eq-name{font-size:13px;font-weight:500}.eq-count{font-size:11px;color:#9ca3af}
+.inline-form{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:500px){.inline-form{grid-template-columns:1fr}}
+.drag-handle{cursor:grab;color:#9ca3af;padding:0 4px;font-size:16px;user-select:none}.drag-handle:active{cursor:grabbing}
+.dragging{opacity:.4}.drop-target{border-top:3px solid #3b82f6}
+hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
+.conflict-banner{background:#fef9c3;border:1px solid #fde047;border-radius:7px;padding:8px 10px;font-size:12px;color:#854d0e;display:none;margin-top:6px}
+.avail-ok{color:#059669;font-size:11px}.avail-warn{color:#dc2626;font-size:11px}
+.tabs{display:flex;border-bottom:2px solid #e5e7eb;margin-bottom:16px}
+.tab{padding:8px 16px;font-size:13px;cursor:pointer;color:#9ca3af;border-bottom:2px solid transparent;margin-bottom:-2px;font-weight:500}
+.tab.active{color:#1d4ed8;border-bottom-color:#1d4ed8}
+.eq-return-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;background:#f9fafb;margin-bottom:4px;font-size:13px}
+.time-schedule{font-size:11px;color:#6b7280;background:#f3f4f6;border-radius:5px;padding:3px 7px;margin-top:2px;display:inline-block}
+.hint-box{background:#e0f2fe;border-radius:6px;padding:6px 9px;font-size:12px;color:#0369a1;margin-top:5px}
+.eq-group-header{font-size:11px;font-weight:700;color:#374151;background:#f0f4ff;padding:5px 9px;border-top:2px solid #e5e7eb}
+</style>
+</head>
+<body>
+
+<div id="login-overlay">
+  <div id="login-box">
+    <h2 style="font-size:17px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px">🎬 器材借用 <span style="font-size:12px;color:#9ca3af;font-weight:400">管理員</span></h2>
+    <label>密碼</label>
+    <input type="password" id="login-pw" placeholder="輸入管理員密碼">
+    <div class="err" id="login-err" style="display:none">密碼錯誤</div>
+    <button class="btn btn-primary w-full" onclick="doLogin()" style="margin-top:12px">登入</button>
+    <p style="font-size:11px;color:#d1d5db;margin-top:10px;text-align:center">預設密碼：admin123</p>
+  </div>
+</div>
+
+<div id="nav">
+  <div class="logo">🎬 器材借用</div>
+  <button class="nav-btn active" onclick="showPage('borrow')">新增借用</button>
+  <button class="nav-btn" onclick="showPage('records')">借用紀錄</button>
+  <button class="nav-btn" onclick="showPage('members')">社員管理</button>
+  <button class="nav-btn" onclick="showPage('equipment')">器材管理</button>
+  <button class="nav-btn" onclick="showPage('stats')">統計</button>
+  <button class="nav-btn" onclick="showPage('settings')">設定</button>
+  <span id="admin-badge">管理員</span>
+</div>
+
+<!-- ═══ PAGE: 新增借用 ═══ -->
+<div class="page active" id="page-borrow">
+  <div class="section-header"><h2>新增借用申請</h2></div>
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-title">① 借用人資訊</div>
+        <label>姓名 *</label>
+        <input type="text" id="b-name" placeholder="輸入姓名" oninput="onNameInput(this.value)">
+        <div id="member-hint" style="display:none"><div id="member-info-box"></div></div>
+        <div class="err" id="err-name">請輸入姓名</div>
+        <div class="inline-form" style="margin-top:0">
+          <div><label>系級 *</label><input type="text" id="b-dept" placeholder="例：行銷三乙"></div>
+          <div><label>學號 *</label><input type="text" id="b-sid" placeholder="例：D1345026"></div>
+        </div>
+        <div class="inline-form">
+          <div><label>電話 *</label><input type="tel" id="b-phone" placeholder="0912345678"></div>
+          <div><label>Gmail *</label><input type="email" id="b-email" placeholder="abc@gmail.com"></div>
+        </div>
+        <div class="err" id="err-contact">請填寫完整系級、學號、電話、Gmail</div>
+        <label>借用類別 *</label>
+        <select id="b-cat" onchange="onCatChange()">
+          <option value="">選擇類別</option>
+          <option value="personal">個人借用</option>
+          <option value="event">成發拍攝</option>
+          <option value="task">社內任務</option>
+        </select>
+        <div class="err" id="err-cat">請選擇借用類別</div>
+        <div id="collab-section" style="display:none;margin-top:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600;color:#374151">共同拍攝成員</span>
+            <button class="btn btn-sm" onclick="addCollabRow()">+ 新增</button>
+          </div>
+          <div id="collab-list"></div>
+          <p class="text-muted" style="margin-top:4px">共同成員各 +1 次社內任務場次</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">② 先填時間，再選器材</div>
+        <div class="inline-form" style="margin-top:0">
+          <div><label>借出日期時間 *</label><input type="datetime-local" id="b-start" onchange="onTimeChange()"></div>
+          <div><label>預計歸還日期時間 *</label><input type="datetime-local" id="b-end" onchange="onTimeChange()"></div>
+        </div>
+        <div class="err" id="err-time">請選擇正確的借用時間</div>
+      </div>
+      <div class="card"><label>備註</label><textarea id="b-note" rows="2" style="resize:vertical"></textarea></div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">③ 選擇器材</div>
+        <div id="time-reminder" style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:7px 10px;font-size:12px;color:#854d0e;margin-bottom:8px">⏱ 請先填寫借用時間，系統將顯示該時段可借狀態</div>
+        <input class="search-box" type="text" id="eq-search" placeholder="搜尋器材名稱..." oninput="renderEqList()">
+        <div class="cat-tabs" id="eq-cat-tabs">
+          <button class="cat-tab active" onclick="filterEqCat('all',this)">全部</button>
+          <button class="cat-tab" onclick="filterEqCat('相機',this)">相機</button>
+          <button class="cat-tab" onclick="filterEqCat('攝影機',this)">攝影機</button>
+          <button class="cat-tab" onclick="filterEqCat('鏡頭',this)">鏡頭</button>
+          <button class="cat-tab" onclick="filterEqCat('濾鏡',this)">濾鏡</button>
+          <button class="cat-tab" onclick="filterEqCat('麥克風',this)">麥克風</button>
+          <button class="cat-tab" onclick="filterEqCat('燈光',this)">燈光</button>
+          <button class="cat-tab" onclick="filterEqCat('腳架',this)">腳架</button>
+          <button class="cat-tab" onclick="filterEqCat('記憶卡',this)">記憶卡</button>
+          <button class="cat-tab" onclick="filterEqCat('配件',this)">配件</button>
+        </div>
+        <div class="conflict-banner" id="conflict-banner"></div>
+        <div class="err" id="err-eq" style="margin-bottom:6px">請至少選擇一項器材</div>
+        <div id="eq-list" style="max-height:420px;overflow-y:auto"></div>
+      </div>
+      <div class="card" id="selected-card" style="display:none">
+        <div class="card-title">已選器材</div>
+        <div id="selected-list"></div>
+      </div>
+      <button class="btn btn-primary w-full" onclick="submitBorrow()" style="margin-bottom:4px">送出借用申請（審核中）</button>
+      <p class="text-muted" style="text-align:center">時段有衝突時仍可送出，由管理員決定是否核准</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 借用紀錄 ═══ -->
+<div class="page" id="page-records">
+  <div class="section-header">
+    <h2>借用紀錄</h2>
+    <div class="flex gap-6 align-center" style="flex-wrap:wrap">
+      <input type="text" id="filter-search" placeholder="搜尋姓名/學號" oninput="renderRecords()" style="width:130px;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
+      <select id="filter-status" onchange="renderRecords()" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
+        <option value="all">全部狀態</option>
+        <option value="pending">審核中</option>
+        <option value="future">尚未借出</option>
+        <option value="active">借用中</option>
+        <option value="partial">部分歸還</option>
+        <option value="overdue">逾期</option>
+        <option value="done">已歸還</option>
+      </select>
+      <select id="filter-cat" onchange="renderRecords()" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
+        <option value="all">全部類別</option>
+        <option value="personal">個人借用</option>
+        <option value="event">成發拍攝</option>
+        <option value="task">社內任務</option>
+      </select>
+    </div>
+  </div>
+  <div class="stat-grid" id="records-stats"></div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>借用人</th><th>系級/學號</th><th>類別</th><th>器材（可個別管理）</th>
+          <th>借出</th><th>預計歸還</th><th>狀態</th><th>操作</th>
+        </tr></thead>
+        <tbody id="records-body"></tbody>
+      </table>
+    </div>
+    <div id="records-empty" style="text-align:center;padding:28px;color:#d1d5db;display:none">沒有符合條件的紀錄</div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 社員管理 ═══ -->
+<div class="page" id="page-members">
+  <div class="section-header">
+    <h2>社員管理</h2>
+    <button class="btn btn-primary" onclick="openAddMember()">新增社員</button>
+  </div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>姓名</th><th>系級</th><th>學號</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
+        <tbody id="members-body"></tbody>
+      </table>
+    </div>
+    <div id="members-empty" style="text-align:center;padding:28px;color:#d1d5db;display:none">尚無社員資料</div>
+  </div>
+  <div class="card mt-12 highlight">
+    <div class="card-title">任務兌換說明</div>
+    <p class="text-sm" style="color:#555">完成 <strong>3 場社內任務</strong>可兌換 1 次個人借用資格，兌換後扣除 3 場任務計數。</p>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 器材管理 ═══ -->
+<div class="page" id="page-equipment">
+  <div class="section-header">
+    <h2>器材管理</h2>
+    <button class="btn btn-primary" onclick="openAddEq()">+ 新增器材</button>
+  </div>
+  <div class="card">
+    <p class="text-muted" style="margin-bottom:8px">☰ 同類別內可拖曳排序。各類別顯示為獨立區塊。</p>
+    <div class="tbl-wrap">
+      <table id="eq-table">
+        <thead><tr>
+          <th style="width:28px"></th><th>名稱</th><th>分類</th><th>總數</th>
+          <th>借用中</th><th>可用</th><th>可借類別</th><th>操作</th>
+        </tr></thead>
+        <tbody id="eq-all-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 統計 ═══ -->
+<div class="page" id="page-stats">
+  <div class="section-header"><h2>器材借用統計</h2></div>
+  <div class="card">
+    <div class="card-title">各器材被借次數排行</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>器材名稱</th><th>分類</th><th>被借次數</th><th>目前狀態</th></tr></thead>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 設定 ═══ -->
+<div class="page" id="page-settings">
+  <div class="section-header"><h2>系統設定</h2></div>
+  <div class="tabs">
+    <div class="tab active" onclick="switchSettingTab('pw',this)">密碼</div>
+    <div class="tab" onclick="switchSettingTab('placeholder',this)">表單提示文字</div>
+    <div class="tab" onclick="switchSettingTab('email',this)">Email 設定</div>
+    <div class="tab" onclick="switchSettingTab('data',this)">資料管理</div>
+  </div>
+  <div id="setting-pw">
+    <div class="card" style="max-width:380px">
+      <div class="card-title">修改管理員密碼</div>
+      <label>目前密碼</label><input type="password" id="s-old-pw">
+      <label>新密碼</label><input type="password" id="s-new-pw">
+      <label>確認新密碼</label><input type="password" id="s-confirm-pw">
+      <div class="err" id="s-pw-err" style="display:none"></div>
+      <button class="btn btn-primary mt-8" onclick="changePw()" style="margin-top:10px">更新密碼</button>
+      <div id="s-pw-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">密碼已更新 ✓</div>
+    </div>
+  </div>
+  <div id="setting-placeholder" style="display:none">
+    <div class="card" style="max-width:560px">
+      <div class="card-title">自訂表單欄位提示文字（Placeholder）</div>
+      <p class="text-muted" style="margin-bottom:12px">以下設定同時套用至管理員及一般使用者的借用表單。</p>
+      <div class="inline-form" style="margin-top:0">
+        <div><label>姓名</label><input type="text" id="ph-name"></div>
+        <div><label>系級</label><input type="text" id="ph-dept"></div>
+      </div>
+      <div class="inline-form">
+        <div><label>學號</label><input type="text" id="ph-sid"></div>
+        <div><label>電話</label><input type="text" id="ph-phone"></div>
+      </div>
+      <label>Gmail</label><input type="text" id="ph-email">
+      <button class="btn btn-primary" onclick="savePlaceholders()" style="margin-top:12px">儲存提示文字</button>
+      <div id="ph-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">已儲存 ✓</div>
+    </div>
+  </div>
+  <div id="setting-email" style="display:none">
+    <div class="card" style="max-width:560px">
+      <div class="card-title">EmailJS 設定</div>
+      <p class="text-muted" style="margin-bottom:10px">至 <a href="https://www.emailjs.com" target="_blank" style="color:#1d4ed8">emailjs.com</a> 免費註冊後填入。模板變數：<code>{{to_name}}</code> <code>{{borrow_items}}</code> <code>{{borrow_start}}</code> <code>{{borrow_end}}</code></p>
+      <div class="inline-form" style="margin-top:0">
+        <div><label>Service ID</label><input type="text" id="ejs-service" placeholder="service_xxxxxxx"></div>
+        <div><label>Template ID</label><input type="text" id="ejs-template" placeholder="template_xxxxxxx"></div>
+      </div>
+      <label>Public Key</label><input type="text" id="ejs-pubkey">
+      <label>郵件主旨</label><input type="text" id="email-subject" placeholder="【器材借用】申請已通過審核">
+      <label>郵件內文（支援 {{變數}}）</label>
+      <textarea id="email-body" rows="7" style="resize:vertical;font-size:12px;font-family:monospace"></textarea>
+      <button class="btn btn-primary" onclick="saveEmailSettings()" style="margin-top:10px">儲存 Email 設定</button>
+      <div id="email-save-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">已儲存 ✓</div>
+    </div>
+  </div>
+  <div id="setting-data" style="display:none">
+    <div class="card" style="max-width:400px">
+      <div class="card-title">資料管理</div>
+      <p class="text-muted" style="margin-bottom:10px">資料存於瀏覽器本機，建議定期備份。</p>
+      <div class="flex gap-6" style="flex-wrap:wrap">
+        <button class="btn" onclick="exportData()">📥 匯出</button>
+        <button class="btn" onclick="document.getElementById('import-file').click()">📤 匯入</button>
+        <button class="btn btn-danger" onclick="if(confirm('確定清除所有資料？'))clearData()">清除所有資料</button>
+      </div>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+<!-- 新增/編輯社員 -->
+<div class="modal-bg" id="modal-member">
+  <div class="modal">
+    <h3 id="modal-member-title">新增社員</h3>
+    <input type="hidden" id="m-id">
+    <div class="inline-form" style="margin-top:0">
+      <div><label>姓名 *</label><input type="text" id="m-name"></div>
+      <div><label>系級</label><input type="text" id="m-dept"></div>
+    </div>
+    <div class="inline-form">
+      <div><label>學號</label><input type="text" id="m-sid"></div>
+      <div><label>電話</label><input type="tel" id="m-phone"></div>
+    </div>
+    <label>Gmail</label><input type="email" id="m-email">
+    <div class="err" id="err-m-name" style="display:none">請輸入姓名</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-member')">取消</button>
+      <button class="btn btn-primary" onclick="saveMember()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯器材 -->
+<div class="modal-bg" id="modal-eq">
+  <div class="modal">
+    <h3 id="modal-eq-title">新增器材</h3>
+    <input type="hidden" id="eq-edit-id">
+    <label>器材名稱 *</label><input type="text" id="eq-name">
+    <div class="err" id="err-eq-name" style="display:none">請輸入名稱</div>
+    <div class="inline-form">
+      <div>
+        <label>分類</label>
+        <select id="eq-type">
+          <option>相機</option><option>攝影機</option><option>鏡頭</option><option>濾鏡</option>
+          <option>麥克風</option><option>燈光</option><option>腳架</option><option>記憶卡</option><option>配件</option>
+        </select>
+      </div>
+      <div><label>數量</label><input type="number" id="eq-qty" value="1" min="1" max="99"></div>
+    </div>
+    <label>可借類別</label>
+    <div style="margin-top:5px;display:flex;gap:16px">
+      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-p" style="width:auto"> 個人借用</label>
+      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-e" style="width:auto"> 成發拍攝</label>
+      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-t" checked style="width:auto"> 社內任務</label>
+    </div>
+    <div class="err" id="err-eq-allow" style="display:none">請至少勾選一個類別</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-eq')">取消</button>
+      <button class="btn btn-primary" onclick="saveEquipment()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 歸還 -->
+<div class="modal-bg" id="modal-return">
+  <div class="modal">
+    <h3>登記歸還</h3>
+    <div id="return-info" style="background:#f9fafb;border-radius:7px;padding:10px;font-size:12px;margin-bottom:10px"></div>
+    <p style="font-size:12px;font-weight:600;margin-bottom:8px">勾選已歸還的器材：</p>
+    <div id="eq-return-list"></div>
+    <label style="margin-top:10px">備註</label>
+    <textarea id="return-note" rows="2" style="resize:vertical"></textarea>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-return')">取消</button>
+      <button class="btn btn-success" onclick="confirmReturn(false)">登記已勾選歸還</button>
+      <button class="btn btn-warn" onclick="confirmReturn(true)">全部歸還</button>
+    </div>
+  </div>
+</div>
+
+<!-- 管理員修改紀錄器材 -->
+<div class="modal-bg" id="modal-edit-rec-eq">
+  <div class="modal">
+    <h3>修改借用器材</h3>
+    <input type="hidden" id="edit-rec-id">
+    <p style="font-size:12px;color:#6b7280;margin-bottom:12px">可新增或移除此借用單中的器材</p>
+    <div id="rec-eq-current" style="margin-bottom:10px"></div>
+    <hr>
+    <p style="font-size:12px;font-weight:600;margin-bottom:6px">新增器材：</p>
+    <input class="search-box" type="text" id="rec-eq-search" placeholder="搜尋器材..." oninput="renderRecEqAdd()">
+    <div id="rec-eq-add-list" style="max-height:220px;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-edit-rec-eq')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 審核 -->
+<div class="modal-bg" id="modal-approve">
+  <div class="modal">
+    <h3>審核借用申請</h3>
+    <div id="approve-detail"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-approve')">取消</button>
+      <button class="btn btn-danger btn-sm" onclick="rejectBorrow()">駁回</button>
+      <button class="btn btn-success" onclick="approveBorrow()">✓ 審核通過</button>
+    </div>
+  </div>
+</div>
+
+<!-- 社員詳情 -->
+<div class="modal-bg" id="modal-member-detail">
+  <div class="modal">
+    <h3 id="md-title"></h3>
+    <div id="md-body"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-member-detail')">關閉</button></div>
+  </div>
+</div>
+
+<!-- 器材借用時段查詢 -->
+<div class="modal-bg" id="modal-eq-schedule">
+  <div class="modal">
+    <h3 id="eq-sch-title">器材借用時段</h3>
+    <div id="eq-sch-body"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-eq-schedule')">關閉</button></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+// ═══════════════ STORAGE ═══════════════
+function load(k,d){try{const v=localStorage.getItem(k);return v!=null?JSON.parse(v):d}catch{return d}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+
+// ═══════════════ DEFAULT DATA ═══════════════
+const DEFAULT_EQ=[
+  {id:'e001',name:'SONY A7C II',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e002',name:'SONY A7 III',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e003',name:'SONY A7S II',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e004',name:'SONY A7S II（第二台）',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e005',name:'SONY A6400',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e006',name:'CANON EOS R5 Mark II',type:'相機',qty:1,allow:['event','task']},
+  {id:'e007',name:'CANON EOS R6 Mark II',type:'相機',qty:1,allow:['event','task']},
+  {id:'e008',name:'CANON EOS 5D Mark III',type:'相機',qty:1,allow:['event','task']},
+  {id:'e009',name:'CANON 700D',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e010',name:'CANON 70D',type:'相機',qty:1,allow:['personal','event','task']},
+  {id:'e011',name:'攝影機 SONY HDR-CX900',type:'攝影機',qty:2,allow:['event','task']},
+  {id:'e012',name:'攝影機 SONY FDR-AX700',type:'攝影機',qty:1,allow:['event','task']},
+  {id:'e013',name:'攝影機 SONY PXW-X70',type:'攝影機',qty:1,allow:['event','task']},
+  {id:'e014',name:'導播機',type:'攝影機',qty:1,allow:['task']},
+  {id:'e015',name:'鏡頭 SONY FE 16-35mm F2.8 GM II',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e016',name:'鏡頭 SONY FE 55mm F1.8 ZA',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e017',name:'鏡頭 SONY FE 24-70mm F2.8 GM',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e018',name:'鏡頭 SONY FE 24-70mm F4 ZA OSS',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e019',name:'鏡頭 SONY E 18-105mm F4 G OSS',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e020',name:'鏡頭 SONY FE 70-200mm F4 G OSS',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e021',name:'鏡頭 SONY FE 85mm F1.8',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e022',name:'電影鏡 SAMYANG VDSLR 24mm T1.5',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e023',name:'電影鏡 SAMYANG VDSLR 85mm T1.5',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e024',name:'鏡頭 CANON RF 24-105mm F4 L IS USM',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e025',name:'鏡頭 CANON RF 70-200mm F4 L IS USM',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e026',name:'鏡頭 CANON EF 24-105mm F4 L',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e027',name:'鏡頭 CANON EF 70-200mm F4 L（或F2.8L）',type:'鏡頭',qty:1,allow:['event','task']},
+  {id:'e028',name:'鏡頭 SIGMA 18-250mm F3.5-6.3',type:'鏡頭',qty:1,allow:['personal','event','task']},
+  {id:'e029',name:'可調式ND減光鏡 67mm',type:'濾鏡',qty:1,allow:['personal','event','task']},
+  {id:'e030',name:'ND減光鏡 82mm',type:'濾鏡',qty:2,allow:['personal','event','task']},
+  {id:'e031',name:'ND減光鏡 77mm',type:'濾鏡',qty:1,allow:['personal','event','task']},
+  {id:'e032',name:'UV保護鏡 49mm',type:'濾鏡',qty:1,allow:['personal','event','task']},
+  {id:'e033',name:'UV保護鏡 67mm',type:'濾鏡',qty:1,allow:['personal','event','task']},
+  {id:'e034',name:'UV保護鏡 72mm',type:'濾鏡',qty:2,allow:['personal','event','task']},
+  {id:'e035',name:'UV保護鏡 77mm',type:'濾鏡',qty:1,allow:['personal','event','task']},
+  {id:'e036',name:'方型濾鏡系統套組',type:'濾鏡',qty:1,allow:['event','task']},
+  {id:'e037',name:'轉接環 CANON EF-EOS R',type:'配件',qty:1,allow:['event','task']},
+  {id:'e038',name:'圖傳 HOLLYLAND Pyros H',type:'配件',qty:1,allow:['event','task']},
+  {id:'e039',name:'無線麥克風 SONY URX-P1',type:'麥克風',qty:1,allow:['event','task']},
+  {id:'e040',name:'無線麥克風 SONY URX-P2',type:'麥克風',qty:2,allow:['event','task']},
+  {id:'e041',name:'無線麥克風 SONY URX-P40',type:'麥克風',qty:2,allow:['event','task']},
+  {id:'e042',name:'指向 3.5mm MIC',type:'麥克風',qty:5,allow:['personal','event','task']},
+  {id:'e043',name:'指向 XLR MIC',type:'麥克風',qty:1,allow:['event','task']},
+  {id:'e044',name:'指向 MIC',type:'麥克風',qty:1,allow:['personal','event','task']},
+  {id:'e045',name:'手持 MIC',type:'麥克風',qty:2,allow:['event','task']},
+  {id:'e046',name:'一對二領夾MIC Hollyland',type:'麥克風',qty:1,allow:['personal','event','task']},
+  {id:'e047',name:'監聽耳機',type:'麥克風',qty:1,allow:['event','task']},
+  {id:'e048',name:'聚光燈 YONGNUO YNLUX100 Pro',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e049',name:'聚光燈 COB 150W LED',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e050',name:'閃光燈 GODOX QT400',type:'燈光',qty:2,allow:['event','task']},
+  {id:'e051',name:'板燈',type:'燈光',qty:6,allow:['event','task']},
+  {id:'e052',name:'燈棒 GODOX LC500',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e053',name:'布幕腳架延伸桿',type:'燈光',qty:8,allow:['event','task']},
+  {id:'e054',name:'布幕腳架支架',type:'燈光',qty:2,allow:['event','task']},
+  {id:'e055',name:'活動式綠幕',type:'燈光',qty:2,allow:['event','task']},
+  {id:'e056',name:'背景布（深藍、淺藍）',type:'燈光',qty:2,allow:['event','task']},
+  {id:'e057',name:'燈架 W-806B',type:'燈光',qty:4,allow:['event','task']},
+  {id:'e058',name:'燈架（3/8螺絲）',type:'燈光',qty:4,allow:['event','task']},
+  {id:'e059',name:'反折燈架（1/4螺絲）',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e060',name:'三腳燈架 EI-717AT',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e061',name:'燈塔雲台三角架',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e062',name:'伸縮桿（3/8螺絲）',type:'燈光',qty:1,allow:['event','task']},
+  {id:'e063',name:'相機穩定器 DJI RS 4 Mini',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e064',name:'穩定器 DJI RSC 2',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e065',name:'三腳架 NEST NT-04',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e066',name:'三腳架 LIBEC TH-650DV',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e067',name:'三腳架 LIBEC TH-950',type:'腳架',qty:5,allow:['event','task']},
+  {id:'e068',name:'三腳架 WEIFENG WF-718',type:'腳架',qty:3,allow:['personal','event','task']},
+  {id:'e069',name:'三腳架 LIBEC TH-X',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e070',name:'三腳架 WEIFENG EI-525MV',type:'腳架',qty:2,allow:['personal','event','task']},
+  {id:'e071',name:'反折三腳架 MILIBOO',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e072',name:'輕便三腳架 QZSD Q620',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e073',name:'輕便小腳架 WEIFENG WT-3560',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e074',name:'輕便小腳架 MANFROTTO MKC3-P01',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e075',name:'小腳架 SLIK SH-705E',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e076',name:'小腳架 SONY BCT-R640',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e077',name:'小腳架 SONY',type:'腳架',qty:1,allow:['personal','event','task']},
+  {id:'e078',name:'油壓三腳架 SACHTLER Ace',type:'腳架',qty:1,allow:['event','task']},
+  {id:'e079',name:'搖臂組',type:'腳架',qty:1,allow:['event','task']},
+  {id:'e080',name:'滑軌 lx650',type:'腳架',qty:1,allow:['event','task']},
+  {id:'e081',name:'記憶卡 256G 170MB/s（#7）',type:'記憶卡',qty:1,allow:['personal','event','task']},
+  {id:'e082',name:'記憶卡 128G 200MB/s（#5,6,9,10,14,18,21）',type:'記憶卡',qty:5,allow:['personal','event','task']},
+  {id:'e083',name:'記憶卡 128G 170MB/s（#8,12 讀取失敗）',type:'記憶卡',qty:2,allow:['task']},
+  {id:'e084',name:'記憶卡 128G 95MB/s（#11）',type:'記憶卡',qty:1,allow:['personal','event','task']},
+  {id:'e085',name:'記憶卡 64G 200MB/s（#17,20,22,23,24）',type:'記憶卡',qty:5,allow:['personal','event','task']},
+  {id:'e086',name:'記憶卡 64G 170MB/s（#4）',type:'記憶卡',qty:1,allow:['personal','event','task']},
+  {id:'e087',name:'記憶卡 64G 95MB/s（#1）',type:'記憶卡',qty:1,allow:['personal','event','task']},
+  {id:'e088',name:'相機包（大）',type:'配件',qty:3,allow:['personal','event','task']},
+  {id:'e089',name:'相機包（中）',type:'配件',qty:6,allow:['personal','event','task']},
+  {id:'e090',name:'相機包（小）',type:'配件',qty:5,allow:['personal','event','task']},
+  {id:'e091',name:'動力線',type:'配件',qty:5,allow:['event','task']},
+  {id:'e092',name:'DP線',type:'配件',qty:2,allow:['event','task']},
+  {id:'e093',name:'HDMI線',type:'配件',qty:7,allow:['personal','event','task']},
+  {id:'e094',name:'Mini HDMI線',type:'配件',qty:3,allow:['personal','event','task']},
+  {id:'e095',name:'HDMI線（橘）',type:'配件',qty:3,allow:['event','task']},
+  {id:'e096',name:'Micro HDMI-HDMI線（橘）',type:'配件',qty:2,allow:['event','task']},
+  {id:'e097',name:'HDMI L頭',type:'配件',qty:1,allow:['personal','event','task']},
+  {id:'e098',name:'HDMI線 20m',type:'配件',qty:1,allow:['event','task']},
+  {id:'e099',name:'Canon-Canon 20m',type:'配件',qty:2,allow:['event','task']},
+  {id:'e100',name:'Canon-Canon 15m',type:'配件',qty:1,allow:['event','task']},
+  {id:'e101',name:'6.3-6.3（5m）',type:'配件',qty:2,allow:['event','task']},
+  {id:'e102',name:'6.3-6.3（20m）',type:'配件',qty:3,allow:['event','task']},
+  {id:'e103',name:'Canon-6.3（10m）',type:'配件',qty:2,allow:['event','task']},
+  {id:'e104',name:'RCA-RCA（15m）',type:'配件',qty:1,allow:['event','task']},
+  {id:'e105',name:'RCA-3.5（15m）',type:'配件',qty:1,allow:['event','task']},
+];
+
+const DEFAULT_PH={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com'};
+
+// ═══════════════ STATE ═══════════════
+let password=load('pw','admin123');
+let records=load('records',[]);
+let members=load('members',[]);
+let equipment=load('equipment',null);
+if(!equipment||!equipment.length){equipment=DEFAULT_EQ;save('equipment',equipment);}
+let emailSettings=load('emailSettings',{serviceId:'',templateId:'',pubKey:'',subject:'【器材借用】您的申請已通過審核',body:'親愛的 {{to_name}} 同學您好，\n\n您的借用申請已通過審核！\n\n器材：{{borrow_items}}\n借出：{{borrow_start}}\n歸還：{{borrow_end}}\n\n如有問題請洽管理員。'});
+let placeholders=load('placeholders',DEFAULT_PH);
+const TZ='Asia/Taipei';
+function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
+
+// ═══════════════ LOGIN ═══════════════
+function doLogin(){
+  if(document.getElementById('login-pw').value===password){
+    document.getElementById('login-overlay').style.display='none';
+    initPage();
+  }else document.getElementById('login-err').style.display='block';
+}
+document.getElementById('login-pw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+function initPage(){
+  applyPlaceholders();
+  setDefaultTimes();
+  renderEqList();
+  loadEmailSettingsUI();
+  loadPlaceholdersUI();
+}
+
+function applyPlaceholders(){
+  const fields={name:'b-name',dept:'b-dept',sid:'b-sid',phone:'b-phone',email:'b-email'};
+  Object.entries(fields).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(el)el.placeholder=placeholders[k]||DEFAULT_PH[k];
+  });
+}
+
+// ═══════════════ NAV ═══════════════
+function showPage(p){
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  const idx=['borrow','records','members','equipment','stats','settings'].indexOf(p);
+  if(idx>=0)document.querySelectorAll('.nav-btn')[idx].classList.add('active');
+  if(p==='records')renderRecords();
+  if(p==='members')renderMembers();
+  if(p==='equipment')renderEquipment();
+  if(p==='stats')renderStats();
+}
+
+function setDefaultTimes(){
+  const now=nowTW();
+  document.getElementById('b-start').value=fmtDTL(now);
+  document.getElementById('b-end').value=fmtDTL(new Date(now.getTime()+7*24*60*60*1000));
+}
+function fmtDTL(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
+function fmtDate(s){if(!s)return'';const d=new Date(s);return`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+function catLabel(c){return{personal:'個人借用',event:'成發拍攝',task:'社內任務'}[c]||c}
+
+// ═══════════════ STATUS ═══════════════
+function computeStatus(r){
+  if(r.status==='pending')return'pending';
+  if(r.status==='done')return'done';
+  const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
+  const allItems=r.equipment||[];
+  const returned=r.returnedItems||[];
+  if(allItems.length&&allItems.every(e=>returned.includes(e.id+'__'+e.qty)))return'done';
+  const someRet=returned.length>0;
+  if(now<start)return'future';
+  if(now>end)return someRet?'partial':'overdue';
+  return someRet?'partial':'active';
+}
+function statusBadge(st){
+  return{pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
+    active:'<span class="badge badge-active">借用中</span>',partial:'<span class="badge badge-partial">部分歸還</span>',
+    overdue:'<span class="badge badge-overdue">逾期未還</span>',done:'<span class="badge badge-done">已歸還</span>'}[st]||st;
+}
+
+// ═══════════════ AVAILABILITY ═══════════════
+// Returns qty in use for eqId during [start,end], optionally excluding a record
+function getOccupied(eqId,start,end,excludeId){
+  const s=start?new Date(start):null,e=end?new Date(end):null;
+  return records.filter(r=>{
+    if(r.id===excludeId)return false;
+    const st=computeStatus(r);
+    if(st==='pending'||st==='done')return false;
+    if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
+    return true;
+  }).reduce((sum,r)=>{
+    const item=(r.equipment||[]).find(x=>x.id===eqId);
+    if(!item)return sum;
+    const retKey=item.id+'__'+item.qty;
+    if((r.returnedItems||[]).includes(retKey))return sum;
+    return sum+item.qty;
+  },0);
+}
+function getAvail(eqId,start,end,excludeId){
+  const e=equipment.find(x=>x.id===eqId);
+  return e?e.qty-getOccupied(eqId,start,end,excludeId):0;
+}
+
+// ═══════════════ TIME CHANGE ═══════════════
+let eqFilter='all',selectedEq={};
+function onTimeChange(){
+  const start=document.getElementById('b-start').value;
+  const end=document.getElementById('b-end').value;
+  if(start&&end){
+    document.getElementById('time-reminder').style.display='none';
+  }
+  // Re-validate selected qty
+  const conflicts=[];
+  Object.keys(selectedEq).forEach(id=>{
+    const avail=getAvail(id,start,end);
+    if(selectedEq[id]>avail){
+      const e=equipment.find(x=>x.id===id);
+      conflicts.push((e?e.name:id)+`（需${selectedEq[id]}，可${avail}）`);
+    }
+  });
+  const banner=document.getElementById('conflict-banner');
+  if(conflicts.length){banner.style.display='block';banner.innerHTML='⚠️ 時段衝突（仍可送出審核）：'+conflicts.join('、');}
+  else banner.style.display='none';
+  renderEqList();
+}
+
+function onCatChange(){
+  selectedEq={};
+  document.getElementById('collab-section').style.display=
+    document.getElementById('b-cat').value==='task'?'block':'none';
+  renderEqList();renderSelected();
+}
+function filterEqCat(cat,btn){
+  eqFilter=cat;
+  document.querySelectorAll('#eq-cat-tabs .cat-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderEqList();
+}
+
+function renderEqList(){
+  const cat=document.getElementById('b-cat').value;
+  const start=document.getElementById('b-start').value;
+  const end=document.getElementById('b-end').value;
+  const hasTime=start&&end&&new Date(end)>new Date(start);
+  const search=(document.getElementById('eq-search').value||'').toLowerCase();
+  const el=document.getElementById('eq-list');
+  if(!cat){el.innerHTML='<div class="text-muted" style="padding:8px 0">請先選擇借用類別</div>';return;}
+  const items=equipment.filter(e=>{
+    if(!(e.allow||[]).includes(cat))return false;
+    if(eqFilter!=='all'&&e.type!==eqFilter)return false;
+    if(search&&!e.name.toLowerCase().includes(search))return false;
+    return true;
+  });
+  if(!items.length){el.innerHTML='<div class="text-muted" style="padding:8px 0">無符合器材</div>';return;}
+  el.innerHTML=items.map(e=>{
+    const avail=hasTime?getAvail(e.id,start,end):e.qty;
+    const sel=selectedEq[e.id]||0;
+    const availTxt=hasTime
+      ?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`
+      :`<span style="color:#9ca3af">${e.qty} 台</span>`;
+    return`<div class="eq-item">
+      <div>
+        <div class="eq-name">${e.name}</div>
+        <div class="eq-count">${e.type}・${availTxt}
+          <button style="border:none;background:none;color:#3b82f6;font-size:11px;cursor:pointer;padding:0 4px" onclick="openEqSchedule('${e.id}')">📅時段</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-sm" onclick="changeEq('${e.id}',-1)" ${sel<=0?'disabled':''} style="${sel<=0?'opacity:.3':''}">−</button>
+        <span style="min-width:16px;text-align:center;font-weight:600;font-size:13px">${sel}</span>
+        <button class="btn btn-sm" onclick="changeEq('${e.id}',1)" ${sel>=(hasTime?avail:e.qty)?'disabled':''} style="${sel>=(hasTime?avail:e.qty)?'opacity:.3':''}">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function changeEq(id,delta){
+  const start=document.getElementById('b-start').value;
+  const end=document.getElementById('b-end').value;
+  const hasTime=start&&end&&new Date(end)>new Date(start);
+  const avail=hasTime?getAvail(id,start,end):equipment.find(x=>x.id===id).qty;
+  const cur=selectedEq[id]||0;
+  const next=Math.max(0,Math.min(avail,cur+delta));
+  if(next===0)delete selectedEq[id];else selectedEq[id]=next;
+  renderEqList();renderSelected();
+}
+
+function renderSelected(){
+  const ids=Object.keys(selectedEq);
+  const card=document.getElementById('selected-card');
+  if(!ids.length){card.style.display='none';return;}
+  card.style.display='block';
+  document.getElementById('selected-list').innerHTML=ids.map(id=>{
+    const e=equipment.find(x=>x.id===id);
+    return`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${e?e.name:id}</span><span style="color:#9ca3af">× ${selectedEq[id]}</span></div>`;
+  }).join('');
+}
+
+// ═══════════════ EQ SCHEDULE ═══════════════
+function openEqSchedule(eqId){
+  const e=equipment.find(x=>x.id===eqId);
+  document.getElementById('eq-sch-title').textContent=(e?e.name:'器材')+' 借用時段';
+  const relevant=records.filter(r=>{
+    const st=computeStatus(r);
+    if(st==='done')return false;
+    return (r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
+  });
+  if(!relevant.length){
+    document.getElementById('eq-sch-body').innerHTML='<p style="color:#9ca3af;padding:12px 0">目前無借用紀錄</p>';
+  }else{
+    document.getElementById('eq-sch-body').innerHTML=relevant.map(r=>{
+      const st=computeStatus(r);
+      return`<div style="border:1px solid #e5e7eb;border-radius:7px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">${statusBadge(st)}<span class="badge badge-${r.cat}">${catLabel(r.cat)}</span></div>
+        <div style="font-size:13px;font-weight:500">${r.name}（${r.dept||''}）</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:3px">借出：${fmtDate(r.start)}　歸還：${fmtDate(r.end)}</div>
+      </div>`;
+    }).join('');
+  }
+  openModal('modal-eq-schedule');
+}
+
+// ═══════════════ COLLAB ═══════════════
+function addCollabRow(){
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
+  div.innerHTML=`<input type="text" placeholder="姓名" style="flex:1"><input type="text" placeholder="學號" style="flex:1">
+    <button class="btn btn-sm btn-danger" onclick="this.parentNode.remove()">✕</button>`;
+  document.getElementById('collab-list').appendChild(div);
+}
+function getCollabMembers(){
+  return[...document.getElementById('collab-list').children].map(r=>{
+    const inputs=r.querySelectorAll('input');return{name:inputs[0].value.trim(),sid:inputs[1].value.trim()};
+  }).filter(x=>x.name);
+}
+
+// ═══════════════ MEMBER HINT ═══════════════
+function onNameInput(val){
+  const hint=document.getElementById('member-hint');
+  if(!val.trim()){hint.style.display='none';return;}
+  const m=members.find(x=>x.name===val.trim());
+  if(!m){hint.style.display='none';return;}
+  const r=Math.floor((m.taskCount||0)/3);
+  hint.style.display='block';
+  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">社員 · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${((m.taskCount||0)%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
+}
+
+// ═══════════════ SUBMIT BORROW ═══════════════
+function showE(id,show,msg){const el=document.getElementById(id);if(!el)return;el.style.display=show?'block':'none';if(msg)el.textContent=msg;}
+
+function submitBorrow(){
+  const name=document.getElementById('b-name').value.trim();
+  const dept=document.getElementById('b-dept').value.trim();
+  const sid=document.getElementById('b-sid').value.trim();
+  const phone=document.getElementById('b-phone').value.trim();
+  const email=document.getElementById('b-email').value.trim();
+  const cat=document.getElementById('b-cat').value;
+  const start=document.getElementById('b-start').value;
+  const end=document.getElementById('b-end').value;
+  const note=document.getElementById('b-note').value.trim();
+  const collabs=getCollabMembers();
+
+  showE('err-name',!name);
+  showE('err-contact',!dept||!sid||!phone||!email);
+  showE('err-cat',!cat);
+  showE('err-time',!start||!end||new Date(end)<=new Date(start));
+  showE('err-eq',!Object.keys(selectedEq).length);
+  if(!name||!dept||!sid||!phone||!email||!cat||!start||!end||new Date(end)<=new Date(start)||!Object.keys(selectedEq).length)return;
+
+  const eqItems=Object.entries(selectedEq).map(([id,qty])=>({id,qty,name:(equipment.find(x=>x.id===id)||{name:id}).name}));
+  const rec={id:'r'+Date.now(),name,dept,sid,phone,email,cat,start,end,note,equipment:eqItems,collabs,status:'pending',returnedItems:[],createdAt:new Date().toISOString()};
+  records.unshift(rec);save('records',records);
+
+  let m=members.find(x=>x.sid===sid||x.name===name);
+  if(!m){m={id:'m'+Date.now(),name,dept,sid,phone,email,taskCount:0};members.push(m);}
+  else Object.assign(m,{dept,phone,email});
+  save('members',members);
+
+  collabs.forEach(c=>{
+    let cm=members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
+    if(!cm){cm={id:'m'+Date.now(),name:c.name,sid:c.sid,dept:'',phone:'',email:'',taskCount:0};members.push(cm);}
+    if(cat==='task')cm.taskCount=(cm.taskCount||0)+1;
+    save('members',members);
+  });
+
+  selectedEq={};
+  ['b-name','b-dept','b-sid','b-phone','b-email','b-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('b-cat').value='';
+  document.getElementById('member-hint').style.display='none';
+  document.getElementById('eq-search').value='';
+  document.getElementById('collab-list').innerHTML='';
+  document.getElementById('collab-section').style.display='none';
+  document.getElementById('conflict-banner').style.display='none';
+  document.getElementById('time-reminder').style.display='block';
+  setDefaultTimes();renderEqList();renderSelected();
+  alert(`申請已送出（審核中）\n借用人：${name}\n器材：${eqItems.map(e=>e.name+'×'+e.qty).join('、')}`);
+}
+
+// ═══════════════ RECORDS ═══════════════
+function renderRecords(){
+  const sf=document.getElementById('filter-status').value;
+  const cf=document.getElementById('filter-cat').value;
+  const q=(document.getElementById('filter-search').value||'').toLowerCase();
+  const computed=records.map(r=>({...r,cs:computeStatus(r)}));
+  let filtered=computed;
+  if(sf!=='all')filtered=filtered.filter(r=>r.cs===sf);
+  if(cf!=='all')filtered=filtered.filter(r=>r.cat===cf);
+  if(q)filtered=filtered.filter(r=>r.name.toLowerCase().includes(q)||(r.sid||'').toLowerCase().includes(q));
+
+  const counts={pending:0,future:0,active:0,partial:0,overdue:0,done:0};
+  computed.forEach(r=>{if(counts[r.cs]!=null)counts[r.cs]++;});
+  document.getElementById('records-stats').innerHTML=[
+    {l:'審核中',n:counts.pending,c:'#f57f17'},{l:'尚未借出',n:counts.future,c:'#6a1b9a'},
+    {l:'借用中',n:counts.active,c:'#e65100'},{l:'逾期',n:counts.overdue,c:'#dc2626'},
+    {l:'部分歸還',n:counts.partial,c:'#2e7d32'},{l:'已歸還',n:counts.done,c:'#6b7280'},{l:'總計',n:records.length,c:'#374151'}
+  ].map(s=>`<div class="stat"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-label">${s.l}</div></div>`).join('');
+
+  const tbody=document.getElementById('records-body');
+  document.getElementById('records-empty').style.display=filtered.length?'none':'block';
+  if(!filtered.length){tbody.innerHTML='';return;}
+
+  tbody.innerHTML=filtered.map(r=>{
+    const returned=r.returnedItems||[];
+    const eqHtml=(r.equipment||[]).map(e=>{
+      const key=e.id+'__'+e.qty;
+      const isRet=returned.includes(key);
+      return`<span style="${isRet?'text-decoration:line-through;color:#9ca3af':''}">• ${e.name}×${e.qty}</span>`;
+    }).join('<br>');
+
+    const actionBtns=r.cs==='pending'
+      ?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">審核</button>`
+      :r.cs!=='done'
+        ?`<button class="btn btn-sm btn-warn" onclick="openReturn('${r.id}')">歸還</button>`
+        :'';
+
+    return`<tr>
+      <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span></td>
+      <td style="font-size:11px">${r.dept||''}<br>${r.sid||''}</td>
+      <td><span class="badge badge-${r.cat}">${catLabel(r.cat)}</span></td>
+      <td style="font-size:11px;max-width:180px">${eqHtml}<br>
+        <button class="btn btn-sm" style="margin-top:4px;font-size:11px" onclick="openEditRecEq('${r.id}')">✏️ 修改器材</button>
+      </td>
+      <td style="font-size:11px;white-space:nowrap">${fmtDate(r.start)}</td>
+      <td style="font-size:11px;white-space:nowrap">${fmtDate(r.end)}</td>
+      <td>${statusBadge(r.cs)}</td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${actionBtns}
+          <button class="btn btn-sm btn-danger" onclick="deleteRecord('${r.id}')">刪除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteRecord(id){
+  if(!confirm('確定刪除？'))return;
+  records=records.filter(x=>x.id!==id);save('records',records);renderRecords();
+}
+
+// ═══════════════ EDIT RECORD EQUIPMENT ═══════════════
+let editRecId=null;
+function openEditRecEq(id){
+  editRecId=id;
+  document.getElementById('edit-rec-id').value=id;
+  document.getElementById('rec-eq-search').value='';
+  renderRecEqCurrent();
+  renderRecEqAdd();
+  openModal('modal-edit-rec-eq');
+}
+
+function renderRecEqCurrent(){
+  const r=records.find(x=>x.id===editRecId);
+  if(!r)return;
+  document.getElementById('rec-eq-current').innerHTML=`
+    <p style="font-size:12px;font-weight:600;margin-bottom:6px">目前器材：</p>
+    ${(r.equipment||[]).map(e=>`
+      <div class="eq-return-item">
+        <span>${e.name} × ${e.qty}</span>
+        <button class="btn btn-sm btn-danger" onclick="removeRecEq('${e.id}','${e.qty}')">移除</button>
+      </div>`).join('')}`;
+}
+
+function removeRecEq(eqId,qty){
+  const r=records.find(x=>x.id===editRecId);
+  if(!r)return;
+  r.equipment=(r.equipment||[]).filter(e=>e.id!==eqId);
+  // Also clean returnedItems
+  r.returnedItems=(r.returnedItems||[]).filter(k=>!k.startsWith(eqId+'__'));
+  save('records',records);
+  renderRecEqCurrent();
+  if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+}
+
+function renderRecEqAdd(){
+  const r=records.find(x=>x.id===editRecId);
+  if(!r)return;
+  const search=(document.getElementById('rec-eq-search').value||'').toLowerCase();
+  const existing=new Set((r.equipment||[]).map(e=>e.id));
+  const items=equipment.filter(e=>{
+    if(existing.has(e.id))return false;
+    if(search&&!e.name.toLowerCase().includes(search))return false;
+    return true;
+  });
+  document.getElementById('rec-eq-add-list').innerHTML=items.map(e=>{
+    const avail=getAvail(e.id,r.start,r.end,r.id);
+    return`<div class="eq-item">
+      <div><div class="eq-name" style="font-size:12px">${e.name}</div>
+        <div class="eq-count">${e.type}・可用 ${avail}/${e.qty}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <input type="number" id="add-qty-${e.id}" value="1" min="1" max="${Math.max(avail,1)}" style="width:44px;padding:3px 5px;font-size:12px;border:1px solid #d1d5db;border-radius:5px">
+        <button class="btn btn-sm btn-success" onclick="addRecEq('${e.id}')">加入</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addRecEq(eqId){
+  const r=records.find(x=>x.id===editRecId);
+  if(!r)return;
+  const qty=parseInt(document.getElementById('add-qty-'+eqId).value)||1;
+  const e=equipment.find(x=>x.id===eqId);
+  if(!e)return;
+  r.equipment=(r.equipment||[]);
+  const exist=r.equipment.find(x=>x.id===eqId);
+  if(exist)exist.qty+=qty;
+  else r.equipment.push({id:eqId,qty,name:e.name});
+  save('records',records);
+  renderRecEqCurrent();
+  renderRecEqAdd();
+  if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+}
+
+// ═══════════════ APPROVE ═══════════════
+let approveTargetId=null;
+function openApprove(id){
+  approveTargetId=id;
+  const r=records.find(x=>x.id===id);
+  // Check conflicts
+  const conflicts=[];
+  (r.equipment||[]).forEach(e=>{
+    const avail=getAvail(e.id,r.start,r.end,r.id);
+    if(e.qty>avail)conflicts.push(e.name+`（需${e.qty}，可${avail}）`);
+  });
+  document.getElementById('approve-detail').innerHTML=`
+    <div style="background:#f9fafb;border-radius:7px;padding:10px;font-size:12px;margin-bottom:8px">
+      <div><strong>${r.name}</strong>（${r.dept||''} / ${r.sid||''}）</div>
+      <div>Email：${r.email||'未填'}</div>
+      <div>類別：${catLabel(r.cat)}</div>
+      <div>器材：${(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')}</div>
+      <div>借出：${fmtDate(r.start)}　歸還：${fmtDate(r.end)}</div>
+    </div>
+    ${conflicts.length?`<div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:8px;font-size:12px;color:#854d0e;margin-bottom:8px">⚠️ 時段衝突：${conflicts.join('、')}</div>`:''}
+    <p style="font-size:12px;color:#6b7280">審核通過後自動寄送 Email（需設定 EmailJS）。</p>`;
+  openModal('modal-approve');
+}
+function approveBorrow(){
+  const r=records.find(x=>x.id===approveTargetId);
+  if(!r)return;
+  r.status='approved';
+  if(r.cat==='task'){
+    let m=members.find(x=>x.sid===r.sid||x.name===r.name);
+    if(m)m.taskCount=(m.taskCount||0)+1;
+    save('members',members);
+  }
+  save('records',records);closeModal('modal-approve');renderRecords();
+  if(r.email&&emailSettings.serviceId&&emailSettings.templateId&&emailSettings.pubKey)sendApprovalEmail(r);
+  else alert('審核通過！（Email 尚未設定）');
+}
+function rejectBorrow(){
+  if(!confirm('確定駁回？'))return;
+  records=records.filter(x=>x.id!==approveTargetId);
+  save('records',records);closeModal('modal-approve');renderRecords();
+}
+function sendApprovalEmail(r){
+  emailjs.init(emailSettings.pubKey);
+  const body=(emailSettings.body||'').replace(/{{to_name}}/g,r.name).replace(/{{borrow_items}}/g,(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')).replace(/{{borrow_start}}/g,fmtDate(r.start)).replace(/{{borrow_end}}/g,fmtDate(r.end));
+  emailjs.send(emailSettings.serviceId,emailSettings.templateId,{to_email:r.email,to_name:r.name,subject:emailSettings.subject,message:body,borrow_items:(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、'),borrow_start:fmtDate(r.start),borrow_end:fmtDate(r.end)})
+    .then(()=>alert('審核通過，Email 已寄出！'))
+    .catch(e=>{console.error(e);alert('審核通過，但 Email 失敗：'+e.text);});
+}
+
+// ═══════════════ RETURN ═══════════════
+let returnTargetId=null;
+function openReturn(id){
+  returnTargetId=id;
+  const r=records.find(x=>x.id===id);
+  const returned=r.returnedItems||[];
+  document.getElementById('return-info').innerHTML=`<strong>${r.name}</strong>（${r.dept||''} / ${r.sid||''}）・${catLabel(r.cat)}<br>借出 ${fmtDate(r.start)}　預計歸還 ${fmtDate(r.end)}`;
+  document.getElementById('eq-return-list').innerHTML=(r.equipment||[]).map(e=>{
+    const key=e.id+'__'+e.qty;const isRet=returned.includes(key);
+    return`<div class="eq-return-item">
+      <label style="margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:${isRet?'#9ca3af':'#374151'}">
+        <input type="checkbox" id="ret-${e.id}" ${isRet?'checked disabled':''} style="width:auto">
+        ${e.name} × ${e.qty}
+      </label>
+      ${isRet?'<span style="font-size:11px;color:#059669">已歸還</span>':'<span style="font-size:11px;color:#9ca3af">未還</span>'}
+    </div>`;
+  }).join('');
+  document.getElementById('return-note').value='';
+  openModal('modal-return');
+}
+function confirmReturn(all){
+  const r=records.find(x=>x.id===returnTargetId);if(!r)return;
+  if(all){
+    r.status='done';r.returnedItems=(r.equipment||[]).map(e=>e.id+'__'+e.qty);r.returnedAt=new Date().toISOString();
+  }else{
+    const checked=(r.equipment||[]).filter(e=>document.getElementById('ret-'+e.id)?.checked&&!(r.returnedItems||[]).includes(e.id+'__'+e.qty));
+    if(!checked.length){alert('請勾選尚未歸還的器材');return;}
+    const newRet=[...(r.returnedItems||[]),...checked.map(e=>e.id+'__'+e.qty)];
+    r.returnedItems=newRet;
+    if((r.equipment||[]).every(e=>newRet.includes(e.id+'__'+e.qty))){r.status='done';r.returnedAt=new Date().toISOString();}
+  }
+  r.returnNote=document.getElementById('return-note').value.trim();
+  save('records',records);closeModal('modal-return');renderRecords();
+}
+
+// ═══════════════ MEMBERS ═══════════════
+function renderMembers(){
+  const tbody=document.getElementById('members-body');
+  document.getElementById('members-empty').style.display=members.length?'none':'block';
+  if(!members.length){tbody.innerHTML='';return;}
+  tbody.innerHTML=members.map(m=>{
+    const tc=m.taskCount||0,r=Math.floor(tc/3),prog=tc%3;
+    return`<tr>
+      <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
+      <td>${tc} 場</td>
+      <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
+      <td><span class="token-bar">${[0,1,2].map(i=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> ${prog}/3</td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="addTask('${m.id}')">+任務</button>
+          <button class="btn btn-sm btn-danger" onclick="removeTask('${m.id}')">−任務</button>
+          ${r>0?`<button class="btn btn-sm btn-purple" onclick="redeemTask('${m.id}')">兌換</button>`:''}
+          <button class="btn btn-sm" onclick="openEditMember('${m.id}')">編輯</button>
+          <button class="btn btn-sm" onclick="viewMemberDetail('${m.id}')">紀錄</button>
+          <button class="btn btn-sm btn-danger" onclick="delMember('${m.id}')">刪除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+function openAddMember(){
+  document.getElementById('modal-member-title').textContent='新增社員';
+  document.getElementById('m-id').value='';
+  ['m-name','m-dept','m-sid','m-phone','m-email'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('err-m-name').style.display='none';
+  openModal('modal-member');
+}
+function openEditMember(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  document.getElementById('modal-member-title').textContent='編輯社員';
+  document.getElementById('m-id').value=id;
+  document.getElementById('m-name').value=m.name||'';
+  document.getElementById('m-dept').value=m.dept||'';
+  document.getElementById('m-sid').value=m.sid||'';
+  document.getElementById('m-phone').value=m.phone||'';
+  document.getElementById('m-email').value=m.email||'';
+  document.getElementById('err-m-name').style.display='none';
+  openModal('modal-member');
+}
+function saveMember(){
+  const name=document.getElementById('m-name').value.trim();
+  if(!name){document.getElementById('err-m-name').style.display='block';return;}
+  const id=document.getElementById('m-id').value;
+  const data={name,dept:document.getElementById('m-dept').value.trim(),sid:document.getElementById('m-sid').value.trim(),phone:document.getElementById('m-phone').value.trim(),email:document.getElementById('m-email').value.trim()};
+  if(id){const m=members.find(x=>x.id===id);if(m)Object.assign(m,data);}
+  else{if(members.find(m=>m.name===name)){alert('此姓名已存在');return;}members.push({id:'m'+Date.now(),...data,taskCount:0});}
+  save('members',members);closeModal('modal-member');renderMembers();
+}
+function addTask(id){const m=members.find(x=>x.id===id);if(m){m.taskCount=(m.taskCount||0)+1;save('members',members);renderMembers();}}
+function removeTask(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  if((m.taskCount||0)<=0){alert('已為 0');return;}
+  if(!confirm(`確定扣除 ${m.name} 1 場任務？`))return;
+  m.taskCount=Math.max(0,(m.taskCount||0)-1);save('members',members);renderMembers();
+}
+function redeemTask(id){
+  const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<3)return;
+  if(!confirm(`幫 ${m.name} 兌換 1 次個人借用？（扣 3 場）`))return;
+  m.taskCount-=3;save('members',members);renderMembers();alert(`兌換成功！剩餘 ${m.taskCount} 場`);
+}
+function delMember(id){if(!confirm('確定刪除？'))return;members=members.filter(x=>x.id!==id);save('members',members);renderMembers();}
+function viewMemberDetail(id){
+  const m=members.find(x=>x.id===id);
+  const recs=records.filter(r=>r.name===m.name||(m.sid&&r.sid===m.sid));
+  document.getElementById('md-title').textContent=m.name+' 的借用紀錄';
+  document.getElementById('md-body').innerHTML=!recs.length?'<p class="text-muted">尚無紀錄</p>':
+    recs.map(r=>`<div style="border:1px solid #e5e7eb;border-radius:7px;padding:9px;margin-bottom:7px">
+      <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px"><span class="badge badge-${r.cat}">${catLabel(r.cat)}</span>${statusBadge(computeStatus(r))}<span class="text-muted">${fmtDate(r.start)}</span></div>
+      <div style="font-size:12px">${(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')}</div>
+    </div>`).join('');
+  openModal('modal-member-detail');
+}
+
+// ═══════════════ EQUIPMENT ═══════════════
+let dragSrcId=null;
+function renderEquipment(){
+  const tbody=document.getElementById('eq-all-body');
+  // Group by type, maintain order within type
+  const types=[...new Set(equipment.map(e=>e.type))];
+  let html='';
+  types.forEach(type=>{
+    const group=equipment.filter(e=>e.type===type);
+    html+=`<tr><td colspan="8" class="eq-group-header">${type}</td></tr>`;
+    group.forEach(e=>{
+      const inUse=records.filter(r=>computeStatus(r)!=='done'&&computeStatus(r)!=='pending').reduce((s,r)=>{
+        const item=(r.equipment||[]).find(x=>x.id===e.id);
+        if(item&&!(r.returnedItems||[]).includes(item.id+'__'+item.qty))return s+item.qty;return s;
+      },0);
+      const avail=e.qty-inUse;
+      html+=`<tr draggable="true" data-id="${e.id}" data-type="${e.type}"
+        ondragstart="dragStart(event,'${e.id}')"
+        ondragover="dragOver(event,'${e.id}')"
+        ondrop="dragDrop(event,'${e.id}')"
+        ondragleave="dragLeave(event)">
+        <td><span class="drag-handle">☰</span></td>
+        <td>${e.name}</td>
+        <td><span class="badge badge-done">${e.type}</span></td>
+        <td>${e.qty}</td>
+        <td>${inUse>0?`<span style="color:#e65100">${inUse}</span>`:0}</td>
+        <td>${avail>0?`<span style="color:#059669">${avail}</span>`:`<span style="color:#dc2626">0</span>`}</td>
+        <td style="font-size:11px">${(e.allow||[]).map(a=>catLabel(a)).join('、')}</td>
+        <td>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-sm" onclick="openEditEq('${e.id}')">編輯</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteEq('${e.id}')">刪除</button>
+          </div>
+        </td>
+      </tr>`;
+    });
+  });
+  tbody.innerHTML=html;
+}
+
+function dragStart(e,id){dragSrcId=id;e.currentTarget.classList.add('dragging');}
+function dragOver(e,id){
+  e.preventDefault();
+  const src=equipment.find(x=>x.id===dragSrcId);
+  const tgt=equipment.find(x=>x.id===id);
+  if(src&&tgt&&src.type===tgt.type)e.currentTarget.classList.add('drop-target');
+}
+function dragLeave(e){e.currentTarget.classList.remove('drop-target');}
+function dragDrop(e,targetId){
+  e.currentTarget.classList.remove('drop-target');
+  if(!dragSrcId||dragSrcId===targetId)return;
+  const src=equipment.find(x=>x.id===dragSrcId),tgt=equipment.find(x=>x.id===targetId);
+  if(!src||!tgt||src.type!==tgt.type){alert('只能在同類別內排序');return;}
+  const si=equipment.indexOf(src),ti=equipment.indexOf(tgt);
+  equipment.splice(si,1);equipment.splice(ti,0,src);
+  save('equipment',equipment);renderEquipment();dragSrcId=null;
+}
+
+function openAddEq(){
+  document.getElementById('modal-eq-title').textContent='新增器材';
+  document.getElementById('eq-edit-id').value='';
+  document.getElementById('eq-name').value='';
+  document.getElementById('eq-qty').value='1';
+  document.getElementById('eq-type').value='相機';
+  ['eq-p','eq-e','eq-t'].forEach((id,i)=>document.getElementById(id).checked=i===2);
+  ['err-eq-name','err-eq-allow'].forEach(id=>document.getElementById(id).style.display='none');
+  openModal('modal-eq');
+}
+function openEditEq(id){
+  const e=equipment.find(x=>x.id===id);if(!e)return;
+  document.getElementById('modal-eq-title').textContent='編輯器材';
+  document.getElementById('eq-edit-id').value=id;
+  document.getElementById('eq-name').value=e.name;
+  document.getElementById('eq-qty').value=e.qty;
+  document.getElementById('eq-type').value=e.type;
+  document.getElementById('eq-p').checked=(e.allow||[]).includes('personal');
+  document.getElementById('eq-e').checked=(e.allow||[]).includes('event');
+  document.getElementById('eq-t').checked=(e.allow||[]).includes('task');
+  ['err-eq-name','err-eq-allow'].forEach(id=>document.getElementById(id).style.display='none');
+  openModal('modal-eq');
+}
+function saveEquipment(){
+  const name=document.getElementById('eq-name').value.trim();
+  const type=document.getElementById('eq-type').value;
+  const qty=parseInt(document.getElementById('eq-qty').value)||1;
+  const allow=['personal','event','task'].filter((_,i)=>document.getElementById(['eq-p','eq-e','eq-t'][i]).checked);
+  if(!name){document.getElementById('err-eq-name').style.display='block';return;}
+  if(!allow.length){document.getElementById('err-eq-allow').style.display='block';return;}
+  const editId=document.getElementById('eq-edit-id').value;
+  if(editId){
+    const e=equipment.find(x=>x.id===editId);
+    if(e){
+      const oldType=e.type;
+      Object.assign(e,{name,type,qty,allow});
+      // If type changed, move to end of new type group
+      if(oldType!==type){
+        equipment.splice(equipment.indexOf(e),1);
+        // Insert after last item of same type
+        const lastIdx=equipment.map(x=>x.type).lastIndexOf(type);
+        equipment.splice(lastIdx>=0?lastIdx+1:equipment.length,0,e);
+      }
+    }
+  }else{
+    const newEq={id:'e'+Date.now(),name,type,qty,allow};
+    // Insert after last item of same type
+    const lastIdx=equipment.map(x=>x.type).lastIndexOf(type);
+    equipment.splice(lastIdx>=0?lastIdx+1:equipment.length,0,newEq);
+  }
+  save('equipment',equipment);closeModal('modal-eq');renderEquipment();renderEqList();
+}
+function deleteEq(id){
+  if(!confirm('確定刪除？'))return;
+  equipment=equipment.filter(x=>x.id!==id);save('equipment',equipment);renderEquipment();renderEqList();
+}
+
+// ═══════════════ STATS ═══════════════
+function renderStats(){
+  const cnt={};
+  records.forEach(r=>(r.equipment||[]).forEach(e=>{cnt[e.id]=(cnt[e.id]||0)+e.qty;}));
+  const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('stats-body').innerHTML=sorted.map(([id,n],i)=>{
+    const e=equipment.find(x=>x.id===id);
+    const inUse=records.filter(r=>computeStatus(r)==='active').reduce((s,r)=>{const item=(r.equipment||[]).find(x=>x.id===id);return s+(item?item.qty:0);},0);
+    return`<tr>
+      <td style="font-weight:600;color:#6b7280">#${i+1}</td>
+      <td>${e?e.name:id}</td>
+      <td><span class="badge badge-done">${e?e.type:'—'}</span></td>
+      <td><strong>${n}</strong></td>
+      <td>${inUse>0?'<span class="badge badge-active">借用中</span>':'<span class="badge badge-done">閒置</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════ SETTINGS ═══════════════
+function switchSettingTab(tab,btn){
+  ['pw','placeholder','email','data'].forEach(t=>document.getElementById('setting-'+t).style.display=t===tab?'block':'none');
+  document.querySelectorAll('#page-settings .tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function changePw(){
+  const old=document.getElementById('s-old-pw').value,nw=document.getElementById('s-new-pw').value,cf=document.getElementById('s-confirm-pw').value;
+  const err=document.getElementById('s-pw-err'),ok=document.getElementById('s-pw-ok');
+  err.style.display='none';ok.style.display='none';
+  if(old!==password){err.textContent='目前密碼不正確';err.style.display='block';return;}
+  if(!nw){err.textContent='新密碼不可為空';err.style.display='block';return;}
+  if(nw!==cf){err.textContent='兩次密碼不一致';err.style.display='block';return;}
+  password=nw;save('pw',nw);ok.style.display='block';
+  ['s-old-pw','s-new-pw','s-confirm-pw'].forEach(id=>document.getElementById(id).value='');
+}
+function loadPlaceholdersUI(){
+  ['name','dept','sid','phone','email'].forEach(k=>{
+    const el=document.getElementById('ph-'+k);if(el)el.value=placeholders[k]||DEFAULT_PH[k];
+  });
+}
+function savePlaceholders(){
+  ['name','dept','sid','phone','email'].forEach(k=>{
+    const el=document.getElementById('ph-'+k);if(el)placeholders[k]=el.value||DEFAULT_PH[k];
+  });
+  save('placeholders',placeholders);applyPlaceholders();
+  document.getElementById('ph-ok').style.display='block';
+  setTimeout(()=>document.getElementById('ph-ok').style.display='none',2000);
+}
+function loadEmailSettingsUI(){
+  document.getElementById('ejs-service').value=emailSettings.serviceId||'';
+  document.getElementById('ejs-template').value=emailSettings.templateId||'';
+  document.getElementById('ejs-pubkey').value=emailSettings.pubKey||'';
+  document.getElementById('email-subject').value=emailSettings.subject||'';
+  document.getElementById('email-body').value=emailSettings.body||'';
+}
+function saveEmailSettings(){
+  emailSettings={serviceId:document.getElementById('ejs-service').value.trim(),templateId:document.getElementById('ejs-template').value.trim(),pubKey:document.getElementById('ejs-pubkey').value.trim(),subject:document.getElementById('email-subject').value.trim(),body:document.getElementById('email-body').value};
+  save('emailSettings',emailSettings);
+  document.getElementById('email-save-ok').style.display='block';
+  setTimeout(()=>document.getElementById('email-save-ok').style.display='none',2000);
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify({records,members,equipment,emailSettings,placeholders,v:3},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='器材借用_'+new Date().toLocaleDateString('zh-TW').replace(/\//g,'-')+'.json';a.click();
+}
+function importData(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(d.records)records=d.records;if(d.members)members=d.members;
+      if(d.equipment)equipment=d.equipment;if(d.emailSettings)emailSettings=d.emailSettings;
+      if(d.placeholders)placeholders=d.placeholders;
+      save('records',records);save('members',members);save('equipment',equipment);
+      save('emailSettings',emailSettings);save('placeholders',placeholders);
+      alert('匯入成功！');location.reload();
+    }catch{alert('匯入失敗，請確認檔案格式');}
+  };reader.readAsText(file);
+}
+function clearData(){localStorage.clear();location.reload();}
+
+// ═══════════════ MODAL ═══════════════
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-bg').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
+</script>
+
+<script>
+// ═══════════════ CLOUD BACKEND ADAPTER ═══════════════
+const CLOUD_API = '';
+let cloudAdminLoggedIn = false;
+async function cloudJson(url, opts={}){
+  const r=await fetch((CLOUD_API||'')+url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
+  const text=await r.text(); let d={}; try{d=text?JSON.parse(text):{}}catch{}
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+async function cloudAdminBootstrap(){
+  try{
+    const d=await cloudJson('/api/admin/state');
+    if(d&&d.equipment){
+      records=d.records||[];members=d.members||[];equipment=d.equipment||[];emailSettings=d.emailSettings||emailSettings;placeholders=d.placeholders||placeholders;
+      localStorage.setItem('records',JSON.stringify(records));localStorage.setItem('members',JSON.stringify(members));localStorage.setItem('equipment',JSON.stringify(equipment));localStorage.setItem('emailSettings',JSON.stringify(emailSettings));localStorage.setItem('placeholders',JSON.stringify(placeholders));
+      cloudAdminLoggedIn=true;
+      if(typeof initPage==='function')initPage();
+    }
+  }catch(e){}
+}
+const localSave = save;
+save = function(k,v){
+  localSave(k,v);
+  if(cloudAdminLoggedIn && ['records','members','equipment','emailSettings','placeholders'].includes(k)){
+    cloudJson('/api/admin/state/'+encodeURIComponent(k),{method:'PUT',body:JSON.stringify({value:v})}).catch(e=>console.error('Cloud save failed',e));
+  }
+};
+doLogin = async function(){
+  const pw=document.getElementById('login-pw').value;
+  try{
+    await cloudJson('/api/admin/login',{method:'POST',body:JSON.stringify({password:pw})});
+    cloudAdminLoggedIn=true;
+    document.getElementById('login-overlay').style.display='none';
+    const d=await cloudJson('/api/admin/state');
+    records=d.records||[];members=d.members||[];equipment=d.equipment||[];emailSettings=d.emailSettings||emailSettings;placeholders=d.placeholders||placeholders;
+    localStorage.setItem('records',JSON.stringify(records));localStorage.setItem('members',JSON.stringify(members));localStorage.setItem('equipment',JSON.stringify(equipment));localStorage.setItem('emailSettings',JSON.stringify(emailSettings));localStorage.setItem('placeholders',JSON.stringify(placeholders));
+    initPage();
+  }catch(e){document.getElementById('login-err').textContent='密碼錯誤或伺服器連線失敗';document.getElementById('login-err').style.display='block';}
+};
+changePw = async function(){
+  const old=document.getElementById('s-old-pw').value,nw=document.getElementById('s-new-pw').value,cf=document.getElementById('s-confirm-pw').value;
+  const err=document.getElementById('s-pw-err'),ok=document.getElementById('s-pw-ok');err.style.display='none';ok.style.display='none';
+  if(!nw){err.textContent='新密碼不可為空';err.style.display='block';return;} if(nw!==cf){err.textContent='兩次密碼不一致';err.style.display='block';return;}
+  try{await cloudJson('/api/admin/password',{method:'POST',body:JSON.stringify({oldPassword:old,newPassword:nw})}); password=nw; ok.style.display='block'; ['s-old-pw','s-new-pw','s-confirm-pw'].forEach(id=>document.getElementById(id).value='');}
+  catch(e){err.textContent=e.message||'目前密碼不正確';err.style.display='block';}
+};
+// Try to restore an existing admin session on reload.
+cloudAdminBootstrap();
+</script>
+</body>
+</html>

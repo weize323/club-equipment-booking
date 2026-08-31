@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>器材借用｜申請查詢</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#f0f4ff;color:#1a1a1a;font-size:14px;min-height:100vh}
+#header{background:linear-gradient(135deg,#1a1a2e,#16213e);color:#fff;padding:22px 20px 18px;text-align:center}
+#header h1{font-size:20px;font-weight:700}
+#header p{font-size:13px;color:#94a3b8;margin-top:3px}
+.container{max-width:820px;margin:0 auto;padding:0 14px 32px}
+.section-tabs{display:flex;gap:10px;margin:18px 0 16px}
+.sec-tab{flex:1;padding:11px;text-align:center;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;border:2px solid #e2e8f0;color:#64748b;transition:all .15s;background:#fff}
+.sec-tab.active{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+.card{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:18px;margin-bottom:14px}
+.card-title{font-weight:600;font-size:14px;margin-bottom:12px;color:#1e293b}
+label{font-size:12px;color:#64748b;display:block;margin-bottom:3px;margin-top:10px}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;background:#fff}
+input:focus,select:focus{border-color:#3b82f6}
+.btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;font-family:inherit;width:100%}
+.btn-primary{background:#1d4ed8;color:#fff}.btn-primary:hover{background:#1e40af}
+.btn-outline{background:#fff;color:#374151;border:1.5px solid #d1d5db}.btn-outline:hover{background:#f8fafc}
+.btn-sm{padding:3px 9px;font-size:12px;width:auto}
+.err{color:#dc2626;font-size:12px;margin-top:4px;display:none}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600;display:inline-block;white-space:nowrap}
+.badge-personal{background:#fce4ec;color:#880e4f}.badge-event{background:#e3f2fd;color:#0d47a1}
+.badge-task{background:#e8f5e9;color:#1b5e20}.badge-pending{background:#fff8e1;color:#f57f17;border:1px solid #ffe082}
+.badge-future{background:#f3e5f5;color:#6a1b9a}.badge-active{background:#fff3e0;color:#e65100}
+.badge-partial{background:#e8f5e9;color:#2e7d32}.badge-done{background:#f3f3f3;color:#555}
+.badge-overdue{background:#ffebee;color:#c62828}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:540px){.grid-2{grid-template-columns:1fr}}
+.cat-tabs{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.cat-tab{padding:4px 11px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-family:inherit;transition:all .15s}
+.cat-tab.active{background:#1a1a2e;color:#fff;border-color:#1a1a2e}
+.eq-item{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9}
+.eq-item:last-child{border-bottom:none}
+.eq-name{font-size:13px;font-weight:500}.eq-count{font-size:11px;color:#94a3b8}
+.search-box{padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;width:100%;margin-bottom:8px;outline:none;font-family:inherit}
+.search-box:focus{border-color:#3b82f6}
+.avail-ok{color:#059669;font-size:11px}.avail-warn{color:#dc2626;font-size:11px}
+.conflict-warn{background:#fef9c3;border:1px solid #fde047;border-radius:7px;padding:8px;font-size:12px;color:#854d0e;display:none;margin-top:6px}
+.info-row{display:flex;gap:6px;font-size:12px;margin-bottom:3px}
+.info-label{color:#94a3b8;min-width:56px}
+.verify-hero{background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border-radius:10px;padding:16px;margin-bottom:14px}
+.verify-hero h3{font-size:15px;font-weight:600;margin-bottom:3px}
+.verify-hero p{font-size:12px;opacity:.85}
+.rec-card{border:1px solid #e2e8f0;border-radius:9px;padding:14px;margin-bottom:10px}
+.time-banner{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:7px 10px;font-size:12px;color:#854d0e;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div id="header">
+  <h1>🎬 器材借用系統</h1>
+  <p>申請借用・查詢借用紀錄</p>
+</div>
+<div class="container">
+  <div class="section-tabs">
+    <div class="sec-tab active" onclick="switchSection('borrow')">📦 申請借用</div>
+    <div class="sec-tab" onclick="switchSection('query')">📋 查詢借用紀錄</div>
+  </div>
+
+  <!-- ══════ 申請借用 ══════ -->
+  <div id="borrow-area">
+    <div class="card">
+      <div class="card-title">借用人資訊</div>
+      <div class="grid-2">
+        <div><label>姓名 *</label><input type="text" id="ub-name" placeholder="輸入姓名"></div>
+        <div><label>系級 *</label><input type="text" id="ub-dept" placeholder="例：行銷三乙"></div>
+      </div>
+      <div class="grid-2">
+        <div><label>學號 *</label><input type="text" id="ub-sid" placeholder="例：D1345026"></div>
+        <div><label>電話 *</label><input type="tel" id="ub-phone" placeholder="0912345678"></div>
+      </div>
+      <label>Gmail *</label><input type="email" id="ub-email" placeholder="abc@gmail.com">
+      <div class="err" id="ub-err-info">請填寫完整資訊</div>
+      <label>借用類別 *</label>
+      <select id="ub-cat" onchange="onUCatChange()">
+        <option value="">選擇類別</option>
+        <option value="personal">個人借用</option>
+        <option value="event">成發拍攝</option>
+        <option value="task">社內任務</option>
+      </select>
+      <div class="err" id="ub-err-cat">請選擇借用類別</div>
+      <div id="ub-collab-section" style="display:none;margin-top:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:600">共同拍攝成員</span>
+          <button class="btn btn-sm btn-outline" onclick="addUCollabRow()">+ 新增</button>
+        </div>
+        <div id="ub-collab-list"></div>
+        <p style="font-size:11px;color:#94a3b8;margin-top:3px">共同成員各 +1 次社內任務場次</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">② 先填時間，再選器材</div>
+      <div class="grid-2">
+        <div><label>借出日期時間 *</label><input type="datetime-local" id="ub-start" onchange="onUTimeChange()"></div>
+        <div><label>預計歸還日期時間 *</label><input type="datetime-local" id="ub-end" onchange="onUTimeChange()"></div>
+      </div>
+      <div class="err" id="ub-err-time">請選擇正確的借用時間</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">③ 選擇器材</div>
+      <div class="time-banner" id="ub-time-reminder">⏱ 請先填寫借用時間，系統將顯示該時段可借狀態</div>
+      <input class="search-box" type="text" id="ub-eq-search" placeholder="搜尋器材名稱..." oninput="renderUEqList()">
+      <div class="cat-tabs" id="ub-cat-tabs">
+        <button class="cat-tab active" onclick="filterUEqCat('all',this)">全部</button>
+        <button class="cat-tab" onclick="filterUEqCat('相機',this)">相機</button>
+        <button class="cat-tab" onclick="filterUEqCat('攝影機',this)">攝影機</button>
+        <button class="cat-tab" onclick="filterUEqCat('鏡頭',this)">鏡頭</button>
+        <button class="cat-tab" onclick="filterUEqCat('濾鏡',this)">濾鏡</button>
+        <button class="cat-tab" onclick="filterUEqCat('麥克風',this)">麥克風</button>
+        <button class="cat-tab" onclick="filterUEqCat('燈光',this)">燈光</button>
+        <button class="cat-tab" onclick="filterUEqCat('腳架',this)">腳架</button>
+        <button class="cat-tab" onclick="filterUEqCat('記憶卡',this)">記憶卡</button>
+        <button class="cat-tab" onclick="filterUEqCat('配件',this)">配件</button>
+      </div>
+      <div class="conflict-warn" id="ub-conflict-warn"></div>
+      <div class="err" id="ub-err-eq" style="margin-bottom:6px">請至少選擇一項器材</div>
+      <div id="ub-eq-list" style="max-height:380px;overflow-y:auto"></div>
+    </div>
+
+    <div class="card" id="ub-selected-card" style="display:none">
+      <div class="card-title">已選器材</div>
+      <div id="ub-selected-list"></div>
+    </div>
+
+    <div class="card"><label>備註</label><textarea id="ub-note" rows="2" style="resize:vertical"></textarea></div>
+    <button class="btn btn-primary" onclick="submitUBorrow()">送出借用申請</button>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:8px">時段有衝突時仍可送出，由管理員審核決定</p>
+  </div>
+
+  <!-- ══════ 查詢 ══════ -->
+  <div id="query-area" style="display:none">
+    <div id="verify-section">
+      <div class="verify-hero">
+        <h3>🔐 身分驗證</h3>
+        <p>請輸入資訊以查詢個人借用紀錄</p>
+      </div>
+      <div class="card">
+        <div class="grid-2">
+          <div><label>姓名 *</label><input type="text" id="v-name" placeholder="輸入姓名"></div>
+          <div><label>學號 *</label><input type="text" id="v-sid" placeholder="輸入學號"></div>
+        </div>
+        <label>電話 *</label><input type="tel" id="v-phone" placeholder="輸入電話">
+        <div class="err" id="v-err" style="display:none">資料不符，請確認後重試</div>
+        <button class="btn btn-primary" onclick="doVerify()" style="margin-top:14px">驗證身分</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📅 查詢器材借用時段</div>
+        <p style="font-size:12px;color:#64748b;margin-bottom:10px">輸入關鍵字查詢特定器材的借用時段</p>
+        <input class="search-box" type="text" id="sch-search" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList()">
+        <div id="sch-eq-list" style="max-height:260px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <div id="result-section" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:15px;font-weight:600;color:#1e293b" id="result-greeting"></div>
+        <button class="btn btn-sm btn-outline" onclick="doLogout()">切換帳號</button>
+      </div>
+      <div id="result-list"></div>
+      <div class="card">
+        <div class="card-title">📅 查詢器材借用時段</div>
+        <input class="search-box" type="text" id="sch-search2" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList2()">
+        <div id="sch-eq-list2" style="max-height:260px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function load(k,d){try{const v=localStorage.getItem(k);return v!=null?JSON.parse(v):d}catch{return d}}
+function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+const TZ='Asia/Taipei';
+function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
+function fmtDate(s){if(!s)return'';const d=new Date(s);return`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+function fmtDTL(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
+function catLabel(c){return{personal:'個人借用',event:'成發拍攝',task:'社內任務'}[c]||c}
+function computeStatus(r){
+  if(r.status==='pending')return'pending';if(r.status==='done')return'done';
+  const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
+  const allItems=r.equipment||[],returned=r.returnedItems||[];
+  if(allItems.length&&allItems.every(e=>returned.includes(e.id+'__'+e.qty)))return'done';
+  const someRet=returned.length>0;
+  if(now<start)return'future';if(now>end)return someRet?'partial':'overdue';
+  return someRet?'partial':'active';
+}
+function statusBadge(st){
+  return{pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
+    active:'<span class="badge badge-active">借用中</span>',partial:'<span class="badge badge-partial">部分歸還</span>',
+    overdue:'<span class="badge badge-overdue">逾期未還</span>',done:'<span class="badge badge-done">已歸還</span>'}[st]||st;
+}
+
+// Load placeholders from storage and apply
+function applyPlaceholders(){
+  const ph=load('placeholders',{name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com'});
+  const map={name:'ub-name',dept:'ub-dept',sid:'ub-sid',phone:'ub-phone',email:'ub-email'};
+  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=ph[k];});
+}
+applyPlaceholders();
+
+// Section switch
+function switchSection(sec){
+  document.querySelectorAll('.sec-tab').forEach((t,i)=>t.classList.toggle('active',['borrow','query'][i]===sec));
+  document.getElementById('borrow-area').style.display=sec==='borrow'?'block':'none';
+  document.getElementById('query-area').style.display=sec==='query'?'block':'none';
+  if(sec==='borrow'){setUDefaultTimes();renderUEqList();}
+  if(sec==='query'){renderEqScheduleList();}
+}
+
+// ── Verify ────────────────────────────────────────────────────────
+let verifiedUser=null;
+function doVerify(){
+  const name=document.getElementById('v-name').value.trim();
+  const sid=document.getElementById('v-sid').value.trim();
+  const phone=document.getElementById('v-phone').value.trim();
+  const records=load('records',[]),members=load('members',[]);
+  const matchRec=records.find(r=>r.name===name&&r.sid===sid&&r.phone===phone);
+  const matchMem=members.find(m=>m.name===name&&m.sid===sid&&m.phone===phone);
+  if(!matchRec&&!matchMem){document.getElementById('v-err').style.display='block';return;}
+  document.getElementById('v-err').style.display='none';
+  verifiedUser={name,sid,phone};showResults();
+}
+function showResults(){
+  document.getElementById('verify-section').style.display='none';
+  document.getElementById('result-section').style.display='block';
+  document.getElementById('result-greeting').textContent=verifiedUser.name+' 的借用紀錄';
+  const records=load('records',[]);
+  const myRecs=records.filter(r=>r.name===verifiedUser.name&&r.sid===verifiedUser.sid);
+  if(!myRecs.length){
+    document.getElementById('result-list').innerHTML='<div class="card" style="text-align:center;padding:24px;color:#94a3b8">尚無借用紀錄</div>';return;
+  }
+  document.getElementById('result-list').innerHTML=myRecs.map(r=>{
+    const cs=computeStatus(r),returned=r.returnedItems||[];
+    const eqHtml=(r.equipment||[]).map(e=>{
+      const key=e.id+'__'+e.qty,isRet=returned.includes(key);
+      return`<div style="font-size:12px;${isRet?'text-decoration:line-through;color:#94a3b8':''}">• ${e.name}×${e.qty}${isRet?' <span style="color:#059669">✓已還</span>':''}</div>`;
+    }).join('');
+    return`<div class="rec-card">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><span class="badge badge-${r.cat}">${catLabel(r.cat)}</span>${statusBadge(cs)}<span style="font-size:11px;color:#94a3b8">${fmtDate(r.createdAt)}</span></div>
+      <div class="info-row"><span class="info-label">器材</span><div>${eqHtml}</div></div>
+      <div class="info-row"><span class="info-label">借出</span><span>${fmtDate(r.start)}</span></div>
+      <div class="info-row"><span class="info-label">歸還</span><span>${fmtDate(r.end)}</span></div>
+      ${r.note?`<div class="info-row"><span class="info-label">備註</span><span>${r.note}</span></div>`:''}
+      ${cs==='pending'?'<div style="font-size:11px;color:#f57f17;margin-top:6px">⏳ 審核中，通過後 Email 通知</div>':''}
+    </div>`;
+  }).join('');
+  renderEqScheduleList2();
+}
+function doLogout(){
+  verifiedUser=null;
+  document.getElementById('verify-section').style.display='block';
+  document.getElementById('result-section').style.display='none';
+  ['v-name','v-sid','v-phone'].forEach(id=>document.getElementById(id).value='');
+}
+
+// ── Equipment Schedule Query ──────────────────────────────────────
+function getEqSchedules(eqId){
+  const records=load('records',[]);
+  return records.filter(r=>{
+    const st=computeStatus(r);if(st==='done')return false;
+    return (r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
+  });
+}
+function renderEqScheduleList(){
+  const equipment=load('equipment',[]);
+  const q=(document.getElementById('sch-search').value||'').toLowerCase();
+  const items=q?equipment.filter(e=>e.name.toLowerCase().includes(q)):[];
+  const el=document.getElementById('sch-eq-list');
+  if(!q){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">輸入器材名稱搜尋</div>';return;}
+  if(!items.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">無符合器材</div>';return;}
+  el.innerHTML=items.map(e=>renderEqScheduleCard(e)).join('');
+}
+function renderEqScheduleList2(){
+  const equipment=load('equipment',[]);
+  const q=(document.getElementById('sch-search2').value||'').toLowerCase();
+  const items=q?equipment.filter(e=>e.name.toLowerCase().includes(q)):[];
+  const el=document.getElementById('sch-eq-list2');
+  if(!q){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">輸入器材名稱搜尋</div>';return;}
+  if(!items.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">無符合器材</div>';return;}
+  el.innerHTML=items.map(e=>renderEqScheduleCard(e)).join('');
+}
+function renderEqScheduleCard(e){
+  const schedules=getEqSchedules(e.id);
+  const schHtml=!schedules.length
+    ?'<div style="color:#059669;font-size:12px">✓ 目前無借用紀錄，可申請</div>'
+    :schedules.map(r=>{
+        const st=computeStatus(r);
+        return`<div style="border-left:3px solid ${st==='active'?'#f59e0b':st==='future'?'#8b5cf6':'#94a3b8'};padding:4px 8px;margin-bottom:4px;font-size:12px">
+          ${statusBadge(st)} ${fmtDate(r.start)} → ${fmtDate(r.end)}
+        </div>`;
+      }).join('');
+  return`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:6px">${e.name} <span style="font-size:11px;font-weight:400;color:#94a3b8">（${e.qty}台）</span></div>
+    ${schHtml}
+  </div>`;
+}
+
+// ── User Borrow Form ──────────────────────────────────────────────
+let uEqFilter='all',uSelectedEq={};
+function setUDefaultTimes(){
+  const now=nowTW();
+  const el1=document.getElementById('ub-start'),el2=document.getElementById('ub-end');
+  if(!el1.value)el1.value=fmtDTL(now);
+  if(!el2.value)el2.value=fmtDTL(new Date(now.getTime()+7*24*60*60*1000));
+}
+function onUCatChange(){
+  uSelectedEq={};
+  document.getElementById('ub-collab-section').style.display=document.getElementById('ub-cat').value==='task'?'block':'none';
+  renderUEqList();renderUSelected();
+}
+function filterUEqCat(cat,btn){
+  uEqFilter=cat;
+  document.querySelectorAll('#ub-cat-tabs .cat-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');renderUEqList();
+}
+function getUOccupied(eqId,start,end){
+  const records=load('records',[]);
+  const s=start?new Date(start):null,e=end?new Date(end):null;
+  return records.filter(r=>{
+    const st=computeStatus(r);if(st==='pending'||st==='done')return false;
+    if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
+    return true;
+  }).reduce((sum,r)=>{
+    const item=(r.equipment||[]).find(x=>x.id===eqId);
+    if(!item)return sum;
+    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return sum;
+    return sum+item.qty;
+  },0);
+}
+function getUAvail(eqId,start,end){
+  const equipment=load('equipment',[]);
+  const e=equipment.find(x=>x.id===eqId);return e?e.qty-getUOccupied(eqId,start,end):0;
+}
+function onUTimeChange(){
+  const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
+  if(start&&end)document.getElementById('ub-time-reminder').style.display='none';
+  // Re-check selected conflicts
+  const equipment=load('equipment',[]);
+  const conflicts=[];
+  Object.keys(uSelectedEq).forEach(id=>{
+    const avail=getUAvail(id,start,end);
+    if(uSelectedEq[id]>avail){const e=equipment.find(x=>x.id===id);conflicts.push((e?e.name:id)+`（需${uSelectedEq[id]}，可${avail}）`);}
+  });
+  const warn=document.getElementById('ub-conflict-warn');
+  if(conflicts.length){warn.style.display='block';warn.innerHTML='⚠️ 時段衝突（仍可送出審核）：'+conflicts.join('、');}
+  else warn.style.display='none';
+  renderUEqList();
+}
+function renderUEqList(){
+  const equipment=load('equipment',[]);
+  const cat=document.getElementById('ub-cat').value;
+  const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
+  const hasTime=start&&end&&new Date(end)>new Date(start);
+  const search=(document.getElementById('ub-eq-search').value||'').toLowerCase();
+  const el=document.getElementById('ub-eq-list');
+  if(!cat){el.innerHTML='<div style="color:#94a3b8;padding:8px 0;font-size:13px">請先選擇借用類別</div>';return;}
+  const items=equipment.filter(e=>{
+    if(!(e.allow||[]).includes(cat))return false;
+    if(uEqFilter!=='all'&&e.type!==uEqFilter)return false;
+    if(search&&!e.name.toLowerCase().includes(search))return false;
+    return true;
+  });
+  if(!items.length){el.innerHTML='<div style="color:#94a3b8;padding:8px 0;font-size:13px">無符合器材</div>';return;}
+  el.innerHTML=items.map(e=>{
+    const avail=hasTime?getUAvail(e.id,start,end):e.qty;
+    const sel=uSelectedEq[e.id]||0;
+    const availTxt=hasTime
+      ?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`
+      :`<span style="color:#9ca3af">${e.qty} 台</span>`;
+    const schedules=getEqSchedules(e.id);
+    const schTip=schedules.length?`<button style="border:none;background:none;color:#3b82f6;font-size:11px;cursor:pointer;padding:0 4px" onclick="showEqScheduleTip('${e.id}')">📅時段</button>`:'';
+    return`<div class="eq-item">
+      <div>
+        <div class="eq-name">${e.name}</div>
+        <div class="eq-count">${e.type}・${availTxt} ${schTip}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',-1)" ${sel<=0?'disabled':''} style="${sel<=0?'opacity:.3':''}">−</button>
+        <span style="min-width:16px;text-align:center;font-weight:600;font-size:13px">${sel}</span>
+        <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',1)" ${sel>=(hasTime?avail:e.qty)?'disabled':''} style="${sel>=(hasTime?avail:e.qty)?'opacity:.3':''}">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Schedule tip inline
+let schTipId=null;
+function showEqScheduleTip(eqId){
+  const equipment=load('equipment',[]);
+  if(schTipId===eqId){schTipId=null;renderUEqList();return;}
+  schTipId=eqId;
+  const e=equipment.find(x=>x.id===eqId);
+  const schedules=getEqSchedules(eqId);
+  const tipHtml=`<div id="sch-tip-${eqId}" style="background:#f0f4ff;border:1px solid #c7d2fe;border-radius:7px;padding:8px;margin:4px 0 6px;font-size:12px">
+    <strong>${e?e.name:eqId} 借用時段：</strong><br>
+    ${!schedules.length?'<span style="color:#059669">目前無借用</span>':schedules.map(r=>`${statusBadge(computeStatus(r))} ${fmtDate(r.start)} → ${fmtDate(r.end)}`).join('<br>')}
+  </div>`;
+  // Re-render with tip
+  renderUEqList();
+  const el=document.getElementById('ub-eq-list');
+  // Insert tip after the eq-item of this id
+  const items=el.querySelectorAll('.eq-item');
+  items.forEach((item,i)=>{
+    const btns=item.querySelectorAll('button[onclick]');
+    btns.forEach(b=>{if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes(eqId)&&b.getAttribute('onclick').includes('uChangeEq')){
+      const div=document.createElement('div');div.innerHTML=tipHtml;item.insertAdjacentElement('afterend',div.firstChild);
+    }});
+  });
+}
+
+function uChangeEq(id,delta){
+  const equipment=load('equipment',[]);
+  const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
+  const hasTime=start&&end&&new Date(end)>new Date(start);
+  const avail=hasTime?getUAvail(id,start,end):(equipment.find(x=>x.id===id)||{qty:0}).qty;
+  const cur=uSelectedEq[id]||0,next=Math.max(0,Math.min(avail,cur+delta));
+  if(next===0)delete uSelectedEq[id];else uSelectedEq[id]=next;
+  renderUEqList();renderUSelected();
+}
+function renderUSelected(){
+  const equipment=load('equipment',[]);
+  const ids=Object.keys(uSelectedEq);
+  const card=document.getElementById('ub-selected-card');
+  if(!ids.length){card.style.display='none';return;}
+  card.style.display='block';
+  document.getElementById('ub-selected-list').innerHTML=ids.map(id=>{
+    const e=equipment.find(x=>x.id===id);
+    return`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${e?e.name:id}</span><span style="color:#94a3b8">× ${uSelectedEq[id]}</span></div>`;
+  }).join('');
+}
+function addUCollabRow(){
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
+  div.innerHTML=`<input type="text" placeholder="姓名" style="flex:1"><input type="text" placeholder="學號" style="flex:1">
+    <button class="btn btn-sm" style="width:auto;background:#fff;border:1.5px solid #fca5a5;color:#dc2626" onclick="this.parentNode.remove()">✕</button>`;
+  document.getElementById('ub-collab-list').appendChild(div);
+}
+function getUCollabMembers(){
+  return[...document.getElementById('ub-collab-list').children].map(r=>{
+    const inputs=r.querySelectorAll('input');return{name:inputs[0].value.trim(),sid:inputs[1].value.trim()};
+  }).filter(x=>x.name);
+}
+function showUE(id,show,msg){const el=document.getElementById(id);if(!el)return;el.style.display=show?'block':'none';if(msg)el.textContent=msg;}
+function submitUBorrow(){
+  const equipment=load('equipment',[]);
+  const name=document.getElementById('ub-name').value.trim();
+  const dept=document.getElementById('ub-dept').value.trim();
+  const sid=document.getElementById('ub-sid').value.trim();
+  const phone=document.getElementById('ub-phone').value.trim();
+  const email=document.getElementById('ub-email').value.trim();
+  const cat=document.getElementById('ub-cat').value;
+  const start=document.getElementById('ub-start').value;
+  const end=document.getElementById('ub-end').value;
+  const note=document.getElementById('ub-note').value.trim();
+  const collabs=getUCollabMembers();
+  showUE('ub-err-info',!name||!dept||!sid||!phone||!email);
+  showUE('ub-err-cat',!cat);
+  showUE('ub-err-time',!start||!end||new Date(end)<=new Date(start));
+  showUE('ub-err-eq',!Object.keys(uSelectedEq).length);
+  if(!name||!dept||!sid||!phone||!email||!cat||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
+
+  const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>({id,qty,name:(equipment.find(x=>x.id===id)||{name:id}).name}));
+  const records=load('records',[]);
+  const members=load('members',[]);
+  const rec={id:'r'+Date.now(),name,dept,sid,phone,email,cat,start,end,note,equipment:eqItems,collabs,status:'pending',returnedItems:[],createdAt:new Date().toISOString()};
+  records.unshift(rec);save('records',records);
+  let m=members.find(x=>x.sid===sid||x.name===name);
+  if(!m){m={id:'m'+Date.now(),name,dept,sid,phone,email,taskCount:0};members.push(m);}
+  else Object.assign(m,{dept,phone,email});
+  collabs.forEach(c=>{
+    let cm=members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
+    if(!cm){cm={id:'m'+Date.now(),name:c.name,sid:c.sid,dept:'',phone:'',email:'',taskCount:0};members.push(cm);}
+    if(cat==='task')cm.taskCount=(cm.taskCount||0)+1;
+  });
+  save('members',members);
+
+  uSelectedEq={};
+  ['ub-name','ub-dept','ub-sid','ub-phone','ub-email','ub-note'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ub-cat').value='';
+  document.getElementById('ub-collab-list').innerHTML='';
+  document.getElementById('ub-collab-section').style.display='none';
+  document.getElementById('ub-selected-card').style.display='none';
+  document.getElementById('ub-eq-search').value='';
+  document.getElementById('ub-conflict-warn').style.display='none';
+  document.getElementById('ub-time-reminder').style.display='block';
+  document.getElementById('ub-start').value='';
+  document.getElementById('ub-end').value='';
+  renderUEqList();renderUSelected();
+
+  alert(`申請已送出！\n借用人：${name}\n器材：${eqItems.map(e=>e.name+'×'+e.qty).join('、')}\n\n等待管理員審核，通過後 Email 通知。`);
+  // Switch to query so user can check status
+  verifiedUser={name,sid,phone};
+  switchSection('query');
+  showResults();
+}
+// Init
+setUDefaultTimes();
+renderUEqList();
+renderEqScheduleList();
+</script>
+
+<script>
+// ═══════════════ CLOUD BACKEND ADAPTER ═══════════════
+const CLOUD_API = '';
+async function cloudJson(url, opts={}){
+  const r=await fetch((CLOUD_API||'')+url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
+  const text=await r.text(); let d={}; try{d=text?JSON.parse(text):{}}catch{}
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+async function memberBootstrap(){
+  try{
+    const d=await cloudJson('/api/public-state');
+    localStorage.setItem('equipment',JSON.stringify(d.equipment||[]));
+    localStorage.setItem('records',JSON.stringify(d.records||[]));
+    localStorage.setItem('placeholders',JSON.stringify(d.placeholders||{}));
+    applyPlaceholders(); renderUEqList(); renderEqScheduleList();
+  }catch(e){console.error(e);}
+}
+const originalSubmitUBorrow = submitUBorrow;
+submitUBorrow = async function(){
+  const equipment=load('equipment',[]);
+  const name=document.getElementById('ub-name').value.trim(),dept=document.getElementById('ub-dept').value.trim(),sid=document.getElementById('ub-sid').value.trim(),phone=document.getElementById('ub-phone').value.trim(),email=document.getElementById('ub-email').value.trim(),cat=document.getElementById('ub-cat').value,start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value,note=document.getElementById('ub-note').value.trim();
+  const collabs=getUCollabMembers();
+  showUE('ub-err-info',!name||!dept||!sid||!phone||!email);showUE('ub-err-cat',!cat);showUE('ub-err-time',!start||!end||new Date(end)<=new Date(start));showUE('ub-err-eq',!Object.keys(uSelectedEq).length);
+  if(!name||!dept||!sid||!phone||!email||!cat||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
+  const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>({id,qty,name:(equipment.find(x=>x.id===id)||{name:id}).name}));
+  const btn=document.querySelector('#borrow-area .btn-primary'); if(btn)btn.disabled=true;
+  try{
+    const d=await cloudJson('/api/member/submit',{method:'POST',body:JSON.stringify({name,dept,sid,phone,email,cat,start,end,note,equipment:eqItems,collabs})});
+    // Keep only non-sensitive schedule data in public local cache.
+    localStorage.setItem('records',JSON.stringify(d.publicRecords||[]));
+    uSelectedEq={};['ub-name','ub-dept','ub-sid','ub-phone','ub-email','ub-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('ub-cat').value='';document.getElementById('ub-collab-list').innerHTML='';document.getElementById('ub-collab-section').style.display='none';document.getElementById('ub-selected-card').style.display='none';document.getElementById('ub-eq-search').value='';document.getElementById('ub-conflict-warn').style.display='none';document.getElementById('ub-time-reminder').style.display='block';document.getElementById('ub-start').value='';document.getElementById('ub-end').value='';renderUEqList();renderUSelected();
+    alert(`申請已送出！\n借用人：${name}\n器材：${eqItems.map(e=>e.name+'×'+e.qty).join('、')}\n\n等待管理員審核，通過後 Email 通知。`);
+    verifiedUser={name,sid,phone};switchSection('query');showResults();
+  }catch(e){alert('送出失敗：'+e.message);}
+  finally{if(btn)btn.disabled=false;}
+};
+doVerify = async function(){
+  const name=document.getElementById('v-name').value.trim(),sid=document.getElementById('v-sid').value.trim(),phone=document.getElementById('v-phone').value.trim();
+  if(!name||!sid||!phone){document.getElementById('v-err').textContent='請完整輸入姓名、學號、電話';document.getElementById('v-err').style.display='block';return;}
+  try{
+    const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
+    if(!d.ok){document.getElementById('v-err').textContent='資料不符，請確認後重試';document.getElementById('v-err').style.display='block';return;}
+    document.getElementById('v-err').style.display='none'; verifiedUser={name,sid,phone};
+    const publicRecords=load('records',[]); const own=d.records||[];
+    const map=new Map(publicRecords.map(r=>[r.id,r])); own.forEach(r=>map.set(r.id,r)); localStorage.setItem('records',JSON.stringify([...map.values()])); showResults();
+  }catch(e){document.getElementById('v-err').textContent='目前無法連線，請稍後再試';document.getElementById('v-err').style.display='block';}
+};
+memberBootstrap();
+</script>
+</body>
+</html>
