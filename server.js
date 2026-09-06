@@ -326,6 +326,113 @@ const server=http.createServer(async(req,res)=>{
     }
 
 
+
+    // Admin: import legacy localStorage data (merge mode)
+    if(req.method==='POST'&&u.pathname==='/api/admin/import-legacy'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await body(req);
+      const mode=b.mode||'merge'; // 'merge' or 'overwrite'
+      const report={added:{},skipped:{},merged:{}};
+
+      // ── EQUIPMENT ──
+      if(Array.isArray(b.equipment)&&b.equipment.length){
+        const legacyEq=b.equipment.map(e=>({
+          eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[],
+          ...e
+        }));
+        if(mode==='overwrite'){
+          db.equipment=legacyEq;
+          report.merged.equipment=legacyEq.length;
+        }else{
+          // merge: keep existing, add only those whose id or name don't exist
+          const existIds=new Set(db.equipment.map(e=>e.id));
+          const existNames=new Set(db.equipment.map(e=>e.name));
+          let added=0,skipped=0;
+          for(const e of legacyEq){
+            if(existIds.has(e.id)||existNames.has(e.name)){skipped++;continue;}
+            db.equipment.push(e);added++;
+          }
+          report.added.equipment=added;
+          report.skipped.equipment=skipped;
+        }
+      }
+
+      // ── MEMBERS ──
+      if(Array.isArray(b.members)&&b.members.length){
+        if(mode==='overwrite'){
+          db.members=b.members;
+          report.merged.members=b.members.length;
+        }else{
+          const existIds=new Set(db.members.map(m=>m.id));
+          const existSids=new Set(db.members.filter(m=>m.sid).map(m=>m.sid));
+          let added=0,skipped=0;
+          for(const m of b.members){
+            if(existIds.has(m.id)||(m.sid&&existSids.has(m.sid))){skipped++;continue;}
+            db.members.push(m);added++;
+          }
+          report.added.members=added;
+          report.skipped.members=skipped;
+        }
+      }
+
+      // ── RECORDS ──
+      if(Array.isArray(b.records)&&b.records.length){
+        const legacyRecords=b.records.map(r=>({
+          returnedItems:[],collabs:[],taskName:'',assignedCards:[],
+          ...r,
+          equipment:(r.equipment||[]).map(e=>({
+            assignedCards:[],
+            ...e
+          }))
+        }));
+        if(mode==='overwrite'){
+          db.records=legacyRecords;
+          report.merged.records=legacyRecords.length;
+        }else{
+          const existIds=new Set(db.records.map(r=>r.id));
+          let added=0,skipped=0;
+          for(const r of legacyRecords){
+            if(existIds.has(r.id)){skipped++;continue;}
+            db.records.push(r);added++;
+          }
+          report.added.records=added;
+          report.skipped.records=skipped;
+        }
+        // Sort by createdAt desc
+        db.records.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+      }
+
+      // ── PLACEHOLDERS ──
+      if(b.placeholders&&typeof b.placeholders==='object'){
+        db.placeholders={...db.placeholders,...b.placeholders};
+        report.merged.placeholders=true;
+      }
+
+      // ── EMAIL SETTINGS ──
+      if(b.emailSettings&&typeof b.emailSettings==='object'){
+        db.emailSettings={...db.emailSettings,...b.emailSettings};
+        report.merged.emailSettings=true;
+      }
+
+      // ── LOCATIONS ──
+      if(Array.isArray(b.locations)&&b.locations.length){
+        const existing=new Set(db.locations);
+        const newLocs=b.locations.filter(l=>!existing.has(l));
+        db.locations=[...db.locations,...newLocs];
+        report.added.locations=newLocs.length;
+      }
+
+      // ── CAT ORDER ──
+      if(Array.isArray(b.catOrder)&&b.catOrder.length&&mode==='overwrite'){
+        db.catOrder=b.catOrder;
+        report.merged.catOrder=true;
+      }
+
+      writeDB(db);
+      return json(res,200,{ok:true,report,
+        totals:{records:db.records.length,members:db.members.length,equipment:db.equipment.length}});
+    }
+
     // Admin: update assigned cards for one equipment item in a record
     if(req.method==='PATCH'&&u.pathname.match(/^\/api\/admin\/records\/[^/]+\/cards$/)){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});

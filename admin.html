@@ -357,12 +357,53 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
   </div>
   <div id="setting-data" style="display:none">
-    <div class="card" style="max-width:400px">
+    <div class="card" style="max-width:560px">
       <div class="card-title">資料管理</div>
-      <p class="text-muted" style="margin-bottom:10px">資料存於伺服器。匯出可備份完整資料。</p>
+      <p class="text-muted" style="margin-bottom:12px">資料存於 Railway 伺服器，所有管理員共用同一份。匯出可備份完整資料。</p>
       <div class="flex gap-6" style="flex-wrap:wrap">
         <button class="btn" onclick="exportData()">📥 匯出 JSON</button>
       </div>
+    </div>
+    <div class="card" style="max-width:560px;border-color:#f59e0b;background:#fffbf0">
+      <div class="card-title">📦 匯入舊版瀏覽器資料（localStorage → 伺服器）</div>
+      <p class="text-muted" style="margin-bottom:12px">
+        如果你之前使用單機版（localStorage 版本），可以用此功能將舊資料遷移到伺服器。<br>
+        系統只會讀取<strong>目前這個瀏覽器</strong>中殘留的舊版資料。
+      </p>
+      <button class="btn btn-warn" onclick="scanLegacyData()">🔍 掃描舊版瀏覽器資料</button>
+      <div id="legacy-scan-result" style="margin-top:14px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: 匯入舊版資料確認 -->
+<div class="modal-bg" id="modal-legacy-import">
+  <div class="modal" style="width:580px">
+    <h3>📦 匯入舊版瀏覽器資料</h3>
+    <div id="legacy-modal-body"></div>
+    <div style="margin-top:14px">
+      <label style="font-size:13px;font-weight:500;color:#374151">匯入模式</label>
+      <div style="display:flex;gap:16px;margin-top:8px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px">
+          <input type="radio" name="import-mode" value="merge" checked style="width:auto;margin-top:2px">
+          <div>
+            <div style="font-weight:500;color:#374151">合併（推薦）</div>
+            <div style="font-size:11px;color:#9ca3af">只新增伺服器上不存在的資料，現有資料保留不動</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px">
+          <input type="radio" name="import-mode" value="overwrite" style="width:auto;margin-top:2px">
+          <div>
+            <div style="font-weight:500;color:#dc2626">覆蓋</div>
+            <div style="font-size:11px;color:#9ca3af">舊版資料完整取代伺服器資料（危險，不可復原）</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div id="legacy-import-err" style="color:#dc2626;font-size:12px;margin-top:8px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-legacy-import')">取消</button>
+      <button class="btn btn-warn" id="legacy-confirm-btn" onclick="doLegacyImport()">確認匯入</button>
     </div>
   </div>
 </div>
@@ -1473,6 +1514,193 @@ async function saveCardAssign(){
     document.getElementById('ca-err').style.display='block';
   }finally{
     if(btn)btn.disabled=false;
+  }
+}
+
+
+// ═══ LEGACY IMPORT (localStorage → Railway server) ═══
+let _legacyData = null;
+
+function scanLegacyData(){
+  const result = document.getElementById('legacy-scan-result');
+  result.style.display = 'block';
+
+  // Read from localStorage (one-time read for migration only)
+  function tryParse(key){
+    try{
+      const v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : null;
+    }catch{return null;}
+  }
+
+  const raw = {
+    records:      tryParse('records'),
+    members:      tryParse('members'),
+    equipment:    tryParse('equipment'),
+    placeholders: tryParse('placeholders'),
+    emailSettings:tryParse('emailSettings'),
+    locations:    tryParse('locations'),
+    catOrder:     tryParse('catOrder'),
+  };
+
+  // Check if anything found
+  const hasData = Object.values(raw).some(v => v !== null && (Array.isArray(v) ? v.length > 0 : true));
+  if(!hasData){
+    result.innerHTML = `
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px;font-size:13px;color:#dc2626">
+        ⚠️ 目前這個瀏覽器的 localStorage 中找不到舊版資料。<br>
+        <span style="font-size:11px;color:#9ca3af;margin-top:4px;display:block">請確認使用當初使用舊版系統的同一個瀏覽器開啟此頁面。</span>
+      </div>`;
+    return;
+  }
+
+  _legacyData = raw;
+
+  const rec   = Array.isArray(raw.records)   ? raw.records.length   : 0;
+  const mem   = Array.isArray(raw.members)   ? raw.members.length   : 0;
+  const eq    = Array.isArray(raw.equipment) ? raw.equipment.length  : 0;
+  const hasPH = raw.placeholders && typeof raw.placeholders === 'object';
+  const hasEM = raw.emailSettings && typeof raw.emailSettings === 'object';
+  const hasLoc = Array.isArray(raw.locations) && raw.locations.length > 0;
+
+  result.innerHTML = `
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:8px">✓ 找到舊版資料：</div>
+      <table style="font-size:12px;width:100%;border-collapse:collapse">
+        <tr style="border-bottom:1px solid #dcfce7">
+          <td style="padding:4px 8px;color:#6b7280;font-weight:500">借用紀錄 records</td>
+          <td style="padding:4px 8px;font-weight:600;color:${rec>0?'#1d4ed8':'#9ca3af'}">${rec} 筆</td>
+        </tr>
+        <tr style="border-bottom:1px solid #dcfce7">
+          <td style="padding:4px 8px;color:#6b7280;font-weight:500">社員 members</td>
+          <td style="padding:4px 8px;font-weight:600;color:${mem>0?'#1d4ed8':'#9ca3af'}">${mem} 筆</td>
+        </tr>
+        <tr style="border-bottom:1px solid #dcfce7">
+          <td style="padding:4px 8px;color:#6b7280;font-weight:500">器材 equipment</td>
+          <td style="padding:4px 8px;font-weight:600;color:${eq>0?'#1d4ed8':'#9ca3af'}">${eq} 筆</td>
+        </tr>
+        <tr style="border-bottom:1px solid #dcfce7">
+          <td style="padding:4px 8px;color:#6b7280;font-weight:500">表單提示 placeholders</td>
+          <td style="padding:4px 8px;font-weight:600;color:${hasPH?'#1d4ed8':'#9ca3af'}">${hasPH?'有':'無'}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;color:#6b7280;font-weight:500">Email 設定</td>
+          <td style="padding:4px 8px;font-weight:600;color:${hasEM?'#1d4ed8':'#9ca3af'}">${hasEM?'有':'無'}</td>
+        </tr>
+      </table>
+    </div>
+    <button class="btn btn-primary" onclick="openLegacyImportModal()" style="background:#d97706;border-color:#d97706">
+      📤 開始匯入至伺服器
+    </button>`;
+}
+
+function openLegacyImportModal(){
+  if(!_legacyData){alert('請先掃描舊版資料');return;}
+  const raw = _legacyData;
+
+  const rec   = Array.isArray(raw.records)   ? raw.records.length   : 0;
+  const mem   = Array.isArray(raw.members)   ? raw.members.length   : 0;
+  const eq    = Array.isArray(raw.equipment) ? raw.equipment.length  : 0;
+  const hasPH = raw.placeholders && typeof raw.placeholders === 'object';
+  const hasEM = raw.emailSettings && typeof raw.emailSettings === 'object';
+
+  document.getElementById('legacy-modal-body').innerHTML = `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px">
+      <div style="font-weight:600;color:#92400e;margin-bottom:6px">⚠️ 即將匯入以下資料到 Railway 伺服器：</div>
+      <ul style="color:#78350f;padding-left:16px;line-height:1.8">
+        ${rec>0?`<li>借用紀錄：<strong>${rec} 筆</strong></li>`:''}
+        ${mem>0?`<li>社員資料：<strong>${mem} 筆</strong></li>`:''}
+        ${eq>0?`<li>器材清單：<strong>${eq} 筆</strong></li>`:''}
+        ${hasPH?`<li>表單提示文字</li>`:''}
+        ${hasEM?`<li>Email 設定</li>`:''}
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:#9ca3af">
+        合併模式：ID 或名稱重複的項目會跳過，不會刪除伺服器現有資料。<br>
+        覆蓋模式：舊版資料會完整取代伺服器對應資料，無法復原。
+      </div>
+    </div>`;
+
+  document.getElementById('legacy-import-err').style.display='none';
+  document.querySelector('input[name="import-mode"][value="merge"]').checked = true;
+  openModal('modal-legacy-import');
+}
+
+async function doLegacyImport(){
+  if(!_legacyData){return;}
+  const mode = document.querySelector('input[name="import-mode"]:checked')?.value || 'merge';
+  if(mode === 'overwrite'){
+    if(!confirm('⚠️ 覆蓋模式將完整取代伺服器資料，確定要繼續？')){return;}
+  }
+
+  const btn = document.getElementById('legacy-confirm-btn');
+  if(btn)btn.disabled = true;
+  document.getElementById('legacy-import-err').style.display = 'none';
+
+  try{
+    const payload = {
+      mode,
+      records:      _legacyData.records      || [],
+      members:      _legacyData.members      || [],
+      equipment:    _legacyData.equipment    || [],
+      placeholders: _legacyData.placeholders || {},
+      emailSettings:_legacyData.emailSettings|| {},
+      locations:    _legacyData.locations    || [],
+      catOrder:     _legacyData.catOrder     || [],
+    };
+
+    const d = await api('/api/admin/import-legacy',{
+      method:'POST',
+      body: JSON.stringify(payload)
+    });
+
+    closeModal('modal-legacy-import');
+
+    // Reload full state from server
+    await loadAdminState();
+
+    // Build result summary
+    const r = d.report || {};
+    const added   = r.added   || {};
+    const skipped = r.skipped || {};
+    const merged  = r.merged  || {};
+    const totals  = d.totals  || {};
+
+    const lines = [];
+    if(mode==='merge'){
+      if(added.records  !=null) lines.push(`借用紀錄：新增 ${added.records} 筆，跳過 ${skipped.records||0} 筆（已存在）`);
+      if(added.members  !=null) lines.push(`社員：新增 ${added.members} 筆，跳過 ${skipped.members||0} 筆（已存在）`);
+      if(added.equipment!=null) lines.push(`器材：新增 ${added.equipment} 筆，跳過 ${skipped.equipment||0} 筆（已存在）`);
+      if(merged.placeholders) lines.push('表單提示文字：已合併');
+      if(merged.emailSettings) lines.push('Email 設定：已合併');
+      if(added.locations) lines.push(`位置：新增 ${added.locations} 筆`);
+    }else{
+      if(merged.records!=null)   lines.push(`借用紀錄：覆蓋 ${merged.records} 筆`);
+      if(merged.members!=null)   lines.push(`社員：覆蓋 ${merged.members} 筆`);
+      if(merged.equipment!=null) lines.push(`器材：覆蓋 ${merged.equipment} 筆`);
+      if(merged.placeholders) lines.push('表單提示文字：已覆蓋');
+      if(merged.emailSettings) lines.push('Email 設定：已覆蓋');
+    }
+    lines.push(`──`);
+    lines.push(`伺服器目前：紀錄 ${totals.records||0} 筆・社員 ${totals.members||0} 筆・器材 ${totals.equipment||0} 筆`);
+
+    alert('✅ 匯入完成！\n\n' + lines.join('\n'));
+
+    // Update scan result area to show success
+    const result = document.getElementById('legacy-scan-result');
+    if(result){
+      result.innerHTML = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;font-size:13px;color:#166534">
+        ✅ 匯入已完成，頁面資料已從伺服器重新讀取。<br>
+        <span style="font-size:11px;color:#9ca3af;margin-top:4px;display:block">
+          舊版 localStorage 資料仍保留在瀏覽器中，不會自動清除。如要清除請自行操作瀏覽器開發者工具。
+        </span>
+      </div>`;
+    }
+    _legacyData = null;
+  }catch(e){
+    document.getElementById('legacy-import-err').textContent = '匯入失敗：' + e.message;
+    document.getElementById('legacy-import-err').style.display = 'block';
+  }finally{
+    if(btn)btn.disabled = false;
   }
 }
 
