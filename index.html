@@ -44,12 +44,16 @@ input:focus,select:focus{border-color:#3b82f6}
 .avail-ok{color:#059669;font-size:11px}.avail-warn{color:#dc2626;font-size:11px}
 .conflict-warn{background:#fef9c3;border:1px solid #fde047;border-radius:7px;padding:8px;font-size:12px;color:#854d0e;display:none;margin-top:6px}
 .info-row{display:flex;gap:6px;font-size:12px;margin-bottom:3px}
-.info-label{color:#94a3b8;min-width:56px}
+.info-label{color:#94a3b8;min-width:56px;flex-shrink:0}
 .verify-hero{background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border-radius:10px;padding:16px;margin-bottom:14px}
 .verify-hero h3{font-size:15px;font-weight:600;margin-bottom:3px}
 .verify-hero p{font-size:12px;opacity:.85}
 .rec-card{border:1px solid #e2e8f0;border-radius:9px;padding:14px;margin-bottom:10px}
 .time-banner{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:7px 10px;font-size:12px;color:#854d0e;margin-bottom:8px}
+.card-chip{font-size:10px;background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 5px;margin-left:3px;font-weight:600}
+.eq-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.dot-available{background:#10b981}.dot-inuse{background:#f59e0b}
+.dot-repairing{background:#ef4444}.dot-lost,.dot-disabled{background:#d1d5db}
 </style>
 </head>
 <body>
@@ -63,7 +67,7 @@ input:focus,select:focus{border-color:#3b82f6}
     <div class="sec-tab" onclick="switchSection('query')">📋 查詢借用紀錄</div>
   </div>
 
-  <!-- ══════ 申請借用 ══════ -->
+  <!-- 申請借用 -->
   <div id="borrow-area">
     <div class="card">
       <div class="card-title">借用人資訊</div>
@@ -85,6 +89,11 @@ input:focus,select:focus{border-color:#3b82f6}
         <option value="task">社內任務</option>
       </select>
       <div class="err" id="ub-err-cat">請選擇借用類別</div>
+      <div id="ub-task-name-wrap" style="display:none">
+        <label>任務名稱 *</label>
+        <input type="text" id="ub-task-name" placeholder="例：115_08_23_什麼度冬東">
+        <div class="err" id="ub-err-task-name">社內任務必須填寫任務名稱</div>
+      </div>
       <div id="ub-collab-section" style="display:none;margin-top:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
           <span style="font-size:12px;font-weight:600">共同拍攝成員</span>
@@ -128,14 +137,18 @@ input:focus,select:focus{border-color:#3b82f6}
     <div class="card" id="ub-selected-card" style="display:none">
       <div class="card-title">已選器材</div>
       <div id="ub-selected-list"></div>
+      <div id="ub-card-assign-wrap" style="display:none;margin-top:10px">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">📇 記憶卡卡號指定</div>
+        <div id="ub-card-assign-list"></div>
+      </div>
     </div>
 
     <div class="card"><label>備註</label><textarea id="ub-note" rows="2" style="resize:vertical"></textarea></div>
-    <button class="btn btn-primary" onclick="submitUBorrow()">送出借用申請</button>
+    <button class="btn btn-primary" id="ub-submit-btn" onclick="submitUBorrow()">送出借用申請</button>
     <p style="font-size:12px;color:#94a3b8;text-align:center;margin-top:8px">時段有衝突時仍可送出，由管理員審核決定</p>
   </div>
 
-  <!-- ══════ 查詢 ══════ -->
+  <!-- 查詢 -->
   <div id="query-area" style="display:none">
     <div id="verify-section">
       <div class="verify-hero">
@@ -151,11 +164,10 @@ input:focus,select:focus{border-color:#3b82f6}
         <div class="err" id="v-err" style="display:none">資料不符，請確認後重試</div>
         <button class="btn btn-primary" onclick="doVerify()" style="margin-top:14px">驗證身分</button>
       </div>
-
       <div class="card">
         <div class="card-title">📅 查詢器材借用時段</div>
         <p style="font-size:12px;color:#64748b;margin-bottom:10px">輸入關鍵字查詢特定器材的借用時段</p>
-        <input class="search-box" type="text" id="sch-search" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList()">
+        <input class="search-box" type="text" id="sch-search" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList('sch-search','sch-eq-list')">
         <div id="sch-eq-list" style="max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
@@ -168,7 +180,7 @@ input:focus,select:focus{border-color:#3b82f6}
       <div id="result-list"></div>
       <div class="card">
         <div class="card-title">📅 查詢器材借用時段</div>
-        <input class="search-box" type="text" id="sch-search2" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList2()">
+        <input class="search-box" type="text" id="sch-search2" placeholder="搜尋器材名稱..." oninput="renderEqScheduleList('sch-search2','sch-eq-list2')">
         <div id="sch-eq-list2" style="max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
@@ -176,8 +188,17 @@ input:focus,select:focus{border-color:#3b82f6}
 </div>
 
 <script>
-function load(k,d){try{const v=localStorage.getItem(k);return v!=null?JSON.parse(v):d}catch{return d}}
-function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
+// ═══ API ═══
+async function cloudJson(url,opts={}){
+  const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
+  const text=await r.text();let d={};try{d=text?JSON.parse(text):{}}catch{}
+  if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+
+// ═══ STATE (in-memory from server) ═══
+let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[];
+
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
 function fmtDate(s){if(!s)return'';const d=new Date(s);return`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
@@ -197,14 +218,26 @@ function statusBadge(st){
     active:'<span class="badge badge-active">借用中</span>',partial:'<span class="badge badge-partial">部分歸還</span>',
     overdue:'<span class="badge badge-overdue">逾期未還</span>',done:'<span class="badge badge-done">已歸還</span>'}[st]||st;
 }
+function eqStatusDotClass(s){return{available:'dot-available',inuse:'dot-inuse',repairing:'dot-repairing',lost:'dot-lost',disabled:'dot-disabled'}[s]||'dot-available';}
 
-// Load placeholders from storage and apply
-function applyPlaceholders(){
-  const ph=load('placeholders',{name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com'});
-  const map={name:'ub-name',dept:'ub-dept',sid:'ub-sid',phone:'ub-phone',email:'ub-email'};
-  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=ph[k];});
+async function loadPublicState(){
+  const d=await cloudJson('/api/public-state');
+  pubEquipment=d.equipment||[];
+  pubRecords=d.records||[];
+  pubPlaceholders=d.placeholders||{};
+  pubLocations=d.locations||[];
+  pubCatOrder=d.catOrder||[];
+  applyPlaceholders();
+  setUDefaultTimes();
+  renderUEqList();
+  renderEqScheduleList('sch-search','sch-eq-list');
 }
-applyPlaceholders();
+
+function applyPlaceholders(){
+  const def={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東'};
+  const map={name:'ub-name',dept:'ub-dept',sid:'ub-sid',phone:'ub-phone',email:'ub-email',taskName:'ub-task-name'};
+  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=pubPlaceholders[k]||def[k];});
+}
 
 // Section switch
 function switchSection(sec){
@@ -212,47 +245,57 @@ function switchSection(sec){
   document.getElementById('borrow-area').style.display=sec==='borrow'?'block':'none';
   document.getElementById('query-area').style.display=sec==='query'?'block':'none';
   if(sec==='borrow'){setUDefaultTimes();renderUEqList();}
-  if(sec==='query'){renderEqScheduleList();}
+  if(sec==='query')renderEqScheduleList('sch-search','sch-eq-list');
 }
 
-// ── Verify ────────────────────────────────────────────────────────
+// ── Verify ──
 let verifiedUser=null;
-function doVerify(){
-  const name=document.getElementById('v-name').value.trim();
-  const sid=document.getElementById('v-sid').value.trim();
-  const phone=document.getElementById('v-phone').value.trim();
-  const records=load('records',[]),members=load('members',[]);
-  const matchRec=records.find(r=>r.name===name&&r.sid===sid&&r.phone===phone);
-  const matchMem=members.find(m=>m.name===name&&m.sid===sid&&m.phone===phone);
-  if(!matchRec&&!matchMem){document.getElementById('v-err').style.display='block';return;}
-  document.getElementById('v-err').style.display='none';
-  verifiedUser={name,sid,phone};showResults();
+async function doVerify(){
+  const name=document.getElementById('v-name').value.trim(),sid=document.getElementById('v-sid').value.trim(),phone=document.getElementById('v-phone').value.trim();
+  if(!name||!sid||!phone){document.getElementById('v-err').textContent='請完整輸入姓名、學號、電話';document.getElementById('v-err').style.display='block';return;}
+  try{
+    const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
+    if(!d.ok){document.getElementById('v-err').textContent='資料不符，請確認後重試';document.getElementById('v-err').style.display='block';return;}
+    document.getElementById('v-err').style.display='none';
+    verifiedUser={name,sid,phone};
+    // Merge public records with private ones
+    const own=d.records||[];
+    const map=new Map(pubRecords.map(r=>[r.id,r]));
+    own.forEach(r=>map.set(r.id,r));
+    pubRecords=[...map.values()];
+    showResults();
+  }catch(e){document.getElementById('v-err').textContent='目前無法連線，請稍後再試';document.getElementById('v-err').style.display='block';}
 }
 function showResults(){
   document.getElementById('verify-section').style.display='none';
   document.getElementById('result-section').style.display='block';
   document.getElementById('result-greeting').textContent=verifiedUser.name+' 的借用紀錄';
-  const records=load('records',[]);
-  const myRecs=records.filter(r=>r.name===verifiedUser.name&&r.sid===verifiedUser.sid);
+  const myRecs=pubRecords.filter(r=>r.name===verifiedUser.name&&r.sid===verifiedUser.sid);
   if(!myRecs.length){
-    document.getElementById('result-list').innerHTML='<div class="card" style="text-align:center;padding:24px;color:#94a3b8">尚無借用紀錄</div>';return;
-  }
-  document.getElementById('result-list').innerHTML=myRecs.map(r=>{
-    const cs=computeStatus(r),returned=r.returnedItems||[];
-    const eqHtml=(r.equipment||[]).map(e=>{
-      const key=e.id+'__'+e.qty,isRet=returned.includes(key);
-      return`<div style="font-size:12px;${isRet?'text-decoration:line-through;color:#94a3b8':''}">• ${e.name}×${e.qty}${isRet?' <span style="color:#059669">✓已還</span>':''}</div>`;
+    document.getElementById('result-list').innerHTML='<div class="card" style="text-align:center;padding:24px;color:#94a3b8">尚無借用紀錄</div>';
+  }else{
+    document.getElementById('result-list').innerHTML=myRecs.map(r=>{
+      const cs=computeStatus(r),returned=r.returnedItems||[];
+      const eqHtml=(r.equipment||[]).map(e=>{
+        const key=e.id+'__'+e.qty,isRet=returned.includes(key);
+        const cards=(e.assignedCards||[]).filter(Boolean);
+        return`<div style="font-size:12px;${isRet?'text-decoration:line-through;color:#94a3b8':''}">• ${e.name}×${e.qty}${cards.length?` <span class="card-chip">${cards.join(' ')}</span>`:''}${isRet?' <span style="color:#059669">✓已還</span>':''}</div>`;
+      }).join('');
+      return`<div class="rec-card">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <span class="badge badge-${r.cat}">${catLabel(r.cat)}</span>${statusBadge(cs)}
+          ${r.taskName?`<span style="font-size:11px;color:#374151;font-weight:500">${r.taskName}</span>`:''}
+          <span style="font-size:11px;color:#94a3b8">${fmtDate(r.createdAt)}</span>
+        </div>
+        <div class="info-row"><span class="info-label">器材</span><div>${eqHtml}</div></div>
+        <div class="info-row"><span class="info-label">借出</span><span>${fmtDate(r.start)}</span></div>
+        <div class="info-row"><span class="info-label">歸還</span><span>${fmtDate(r.end)}</span></div>
+        ${r.note?`<div class="info-row"><span class="info-label">備註</span><span>${r.note}</span></div>`:''}
+        ${cs==='pending'?'<div style="font-size:11px;color:#f57f17;margin-top:6px">⏳ 審核中，通過後 Email 通知</div>':''}
+      </div>`;
     }).join('');
-    return`<div class="rec-card">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><span class="badge badge-${r.cat}">${catLabel(r.cat)}</span>${statusBadge(cs)}<span style="font-size:11px;color:#94a3b8">${fmtDate(r.createdAt)}</span></div>
-      <div class="info-row"><span class="info-label">器材</span><div>${eqHtml}</div></div>
-      <div class="info-row"><span class="info-label">借出</span><span>${fmtDate(r.start)}</span></div>
-      <div class="info-row"><span class="info-label">歸還</span><span>${fmtDate(r.end)}</span></div>
-      ${r.note?`<div class="info-row"><span class="info-label">備註</span><span>${r.note}</span></div>`:''}
-      ${cs==='pending'?'<div style="font-size:11px;color:#f57f17;margin-top:6px">⏳ 審核中，通過後 Email 通知</div>':''}
-    </div>`;
-  }).join('');
-  renderEqScheduleList2();
+  }
+  renderEqScheduleList('sch-search2','sch-eq-list2');
 }
 function doLogout(){
   verifiedUser=null;
@@ -261,50 +304,48 @@ function doLogout(){
   ['v-name','v-sid','v-phone'].forEach(id=>document.getElementById(id).value='');
 }
 
-// ── Equipment Schedule Query ──────────────────────────────────────
+// ── Equipment Schedule ──
 function getEqSchedules(eqId){
-  const records=load('records',[]);
-  return records.filter(r=>{
+  return pubRecords.filter(r=>{
     const st=computeStatus(r);if(st==='done')return false;
-    return (r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
+    return(r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
   });
 }
-function renderEqScheduleList(){
-  const equipment=load('equipment',[]);
-  const q=(document.getElementById('sch-search').value||'').toLowerCase();
-  const items=q?equipment.filter(e=>e.name.toLowerCase().includes(q)):[];
-  const el=document.getElementById('sch-eq-list');
+function renderEqScheduleList(searchId,listId){
+  const q=(document.getElementById(searchId).value||'').toLowerCase();
+  const el=document.getElementById(listId);
   if(!q){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">輸入器材名稱搜尋</div>';return;}
+  const items=pubEquipment.filter(e=>e.name.toLowerCase().includes(q));
   if(!items.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">無符合器材</div>';return;}
-  el.innerHTML=items.map(e=>renderEqScheduleCard(e)).join('');
-}
-function renderEqScheduleList2(){
-  const equipment=load('equipment',[]);
-  const q=(document.getElementById('sch-search2').value||'').toLowerCase();
-  const items=q?equipment.filter(e=>e.name.toLowerCase().includes(q)):[];
-  const el=document.getElementById('sch-eq-list2');
-  if(!q){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">輸入器材名稱搜尋</div>';return;}
-  if(!items.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">無符合器材</div>';return;}
-  el.innerHTML=items.map(e=>renderEqScheduleCard(e)).join('');
-}
-function renderEqScheduleCard(e){
-  const schedules=getEqSchedules(e.id);
-  const schHtml=!schedules.length
-    ?'<div style="color:#059669;font-size:12px">✓ 目前無借用紀錄，可申請</div>'
-    :schedules.map(r=>{
+  el.innerHTML=items.map(e=>{
+    const schedules=getEqSchedules(e.id);
+    const cards=(e.cardNumbers||[]);
+    const schHtml=!schedules.length?'<div style="color:#059669;font-size:12px">✓ 目前無借用紀錄，可申請</div>':
+      schedules.map(r=>{
         const st=computeStatus(r);
+        const item=(r.equipment||[]).find(x=>x.id===e.id);
+        const usedCards=(item&&item.assignedCards||[]).filter(Boolean);
         return`<div style="border-left:3px solid ${st==='active'?'#f59e0b':st==='future'?'#8b5cf6':'#94a3b8'};padding:4px 8px;margin-bottom:4px;font-size:12px">
           ${statusBadge(st)} ${fmtDate(r.start)} → ${fmtDate(r.end)}
+          ${usedCards.length?`<span class="card-chip">${usedCards.join(' ')}</span>`:''}
         </div>`;
       }).join('');
-  return`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
-    <div style="font-size:13px;font-weight:600;margin-bottom:6px">${e.name} <span style="font-size:11px;font-weight:400;color:#94a3b8">（${e.qty}台）</span></div>
-    ${schHtml}
-  </div>`;
+    // Show available card numbers
+    const busyCards=new Set();
+    schedules.forEach(r=>{const item=(r.equipment||[]).find(x=>x.id===e.id);if(item)(item.assignedCards||[]).forEach(c=>busyCards.add(c));});
+    const availCards=cards.filter(c=>!busyCards.has(c));
+    const cardInfo=cards.length?`<div style="font-size:11px;color:#6b7280;margin-bottom:4px">
+      卡號：${cards.map(c=>`<span style="margin-right:4px;color:${busyCards.has(c)?'#dc2626':'#059669'}">${c}${busyCards.has(c)?'✗':'✓'}</span>`).join('')}
+    </div>`:'';
+    return`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${e.name} <span style="font-size:11px;font-weight:400;color:#94a3b8">（${e.qty}台）</span></div>
+      ${cardInfo}${schHtml}
+    </div>`;
+  }).join('');
 }
 
-// ── User Borrow Form ──────────────────────────────────────────────
-let uEqFilter='all',uSelectedEq={};
+// ── User Borrow Form ──
+let uEqFilter='all',uSelectedEq={},uAssignedCards={};
 function setUDefaultTimes(){
   const now=nowTW();
   const el1=document.getElementById('ub-start'),el2=document.getElementById('ub-end');
@@ -312,8 +353,10 @@ function setUDefaultTimes(){
   if(!el2.value)el2.value=fmtDTL(new Date(now.getTime()+7*24*60*60*1000));
 }
 function onUCatChange(){
-  uSelectedEq={};
-  document.getElementById('ub-collab-section').style.display=document.getElementById('ub-cat').value==='task'?'block':'none';
+  uSelectedEq={};uAssignedCards={};
+  const cat=document.getElementById('ub-cat').value;
+  document.getElementById('ub-task-name-wrap').style.display=cat==='task'?'block':'none';
+  document.getElementById('ub-collab-section').style.display=cat==='task'?'block':'none';
   renderUEqList();renderUSelected();
 }
 function filterUEqCat(cat,btn){
@@ -322,9 +365,8 @@ function filterUEqCat(cat,btn){
   btn.classList.add('active');renderUEqList();
 }
 function getUOccupied(eqId,start,end){
-  const records=load('records',[]);
   const s=start?new Date(start):null,e=end?new Date(end):null;
-  return records.filter(r=>{
+  return pubRecords.filter(r=>{
     const st=computeStatus(r);if(st==='pending'||st==='done')return false;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
     return true;
@@ -336,18 +378,28 @@ function getUOccupied(eqId,start,end){
   },0);
 }
 function getUAvail(eqId,start,end){
-  const equipment=load('equipment',[]);
-  const e=equipment.find(x=>x.id===eqId);return e?e.qty-getUOccupied(eqId,start,end):0;
+  const e=pubEquipment.find(x=>x.id===eqId);
+  if(!e||e.eqStatus==='disabled'||e.eqStatus==='lost')return 0;
+  return Math.max(0,e.qty-getUOccupied(eqId,start,end));
+}
+function getBusyCards(eqId){
+  const busy=new Set();
+  pubRecords.forEach(r=>{
+    const st=computeStatus(r);if(st==='done'||st==='pending')return;
+    const item=(r.equipment||[]).find(x=>x.id===eqId);
+    if(!item)return;
+    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
+    (item.assignedCards||[]).forEach(c=>busy.add(c));
+  });
+  return busy;
 }
 function onUTimeChange(){
   const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
   if(start&&end)document.getElementById('ub-time-reminder').style.display='none';
-  // Re-check selected conflicts
-  const equipment=load('equipment',[]);
   const conflicts=[];
   Object.keys(uSelectedEq).forEach(id=>{
     const avail=getUAvail(id,start,end);
-    if(uSelectedEq[id]>avail){const e=equipment.find(x=>x.id===id);conflicts.push((e?e.name:id)+`（需${uSelectedEq[id]}，可${avail}）`);}
+    if(uSelectedEq[id]>avail){const e=pubEquipment.find(x=>x.id===id);conflicts.push((e?e.name:id)+`（需${uSelectedEq[id]}，可${avail}）`);}
   });
   const warn=document.getElementById('ub-conflict-warn');
   if(conflicts.length){warn.style.display='block';warn.innerHTML='⚠️ 時段衝突（仍可送出審核）：'+conflicts.join('、');}
@@ -355,14 +407,14 @@ function onUTimeChange(){
   renderUEqList();
 }
 function renderUEqList(){
-  const equipment=load('equipment',[]);
   const cat=document.getElementById('ub-cat').value;
   const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
   const hasTime=start&&end&&new Date(end)>new Date(start);
   const search=(document.getElementById('ub-eq-search').value||'').toLowerCase();
   const el=document.getElementById('ub-eq-list');
   if(!cat){el.innerHTML='<div style="color:#94a3b8;padding:8px 0;font-size:13px">請先選擇借用類別</div>';return;}
-  const items=equipment.filter(e=>{
+  const items=pubEquipment.filter(e=>{
+    if(e.eqStatus==='disabled'||e.eqStatus==='lost')return false;
     if(!(e.allow||[]).includes(cat))return false;
     if(uEqFilter!=='all'&&e.type!==uEqFilter)return false;
     if(search&&!e.name.toLowerCase().includes(search))return false;
@@ -372,15 +424,20 @@ function renderUEqList(){
   el.innerHTML=items.map(e=>{
     const avail=hasTime?getUAvail(e.id,start,end):e.qty;
     const sel=uSelectedEq[e.id]||0;
-    const availTxt=hasTime
-      ?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`
-      :`<span style="color:#9ca3af">${e.qty} 台</span>`;
+    const availTxt=hasTime?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`:`<span style="color:#9ca3af">${e.qty} 台</span>`;
     const schedules=getEqSchedules(e.id);
-    const schTip=schedules.length?`<button style="border:none;background:none;color:#3b82f6;font-size:11px;cursor:pointer;padding:0 4px" onclick="showEqScheduleTip('${e.id}')">📅時段</button>`:'';
+    const noteTxt=e.note?`<div style="font-size:11px;color:#9ca3af;margin-top:1px">${e.note}</div>`:'';
+    const locTxt=e.location?`<span style="font-size:10px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;margin-left:4px">${e.location}</span>`:'';
     return`<div class="eq-item">
       <div>
-        <div class="eq-name">${e.name}</div>
-        <div class="eq-count">${e.type}・${availTxt} ${schTip}</div>
+        <div class="eq-name"><span class="eq-status-dot ${eqStatusDotClass(e.eqStatus||'available')}"></span>${e.name}${locTxt}</div>
+        <div class="eq-count">${e.type}・${availTxt}
+          ${schedules.length?`<button style="border:none;background:none;color:#3b82f6;font-size:11px;cursor:pointer;padding:0 4px" onclick="toggleSchTip('${e.id}',this)">📅時段</button>`:''}
+        </div>
+        ${noteTxt}
+        <div id="sch-tip-${e.id}" style="display:none;background:#f0f4ff;border:1px solid #c7d2fe;border-radius:6px;padding:7px;margin-top:5px;font-size:12px">
+          ${schedules.map(r=>`${statusBadge(computeStatus(r))} ${fmtDate(r.start)} → ${fmtDate(r.end)}`).join('<br>')}
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',-1)" ${sel<=0?'disabled':''} style="${sel<=0?'opacity:.3':''}">−</button>
@@ -390,51 +447,54 @@ function renderUEqList(){
     </div>`;
   }).join('');
 }
-
-// Schedule tip inline
-let schTipId=null;
-function showEqScheduleTip(eqId){
-  const equipment=load('equipment',[]);
-  if(schTipId===eqId){schTipId=null;renderUEqList();return;}
-  schTipId=eqId;
-  const e=equipment.find(x=>x.id===eqId);
-  const schedules=getEqSchedules(eqId);
-  const tipHtml=`<div id="sch-tip-${eqId}" style="background:#f0f4ff;border:1px solid #c7d2fe;border-radius:7px;padding:8px;margin:4px 0 6px;font-size:12px">
-    <strong>${e?e.name:eqId} 借用時段：</strong><br>
-    ${!schedules.length?'<span style="color:#059669">目前無借用</span>':schedules.map(r=>`${statusBadge(computeStatus(r))} ${fmtDate(r.start)} → ${fmtDate(r.end)}`).join('<br>')}
-  </div>`;
-  // Re-render with tip
-  renderUEqList();
-  const el=document.getElementById('ub-eq-list');
-  // Insert tip after the eq-item of this id
-  const items=el.querySelectorAll('.eq-item');
-  items.forEach((item,i)=>{
-    const btns=item.querySelectorAll('button[onclick]');
-    btns.forEach(b=>{if(b.getAttribute('onclick')&&b.getAttribute('onclick').includes(eqId)&&b.getAttribute('onclick').includes('uChangeEq')){
-      const div=document.createElement('div');div.innerHTML=tipHtml;item.insertAdjacentElement('afterend',div.firstChild);
-    }});
-  });
+function toggleSchTip(eqId,btn){
+  const el=document.getElementById('sch-tip-'+eqId);
+  if(el)el.style.display=el.style.display==='none'?'block':'none';
 }
-
 function uChangeEq(id,delta){
-  const equipment=load('equipment',[]);
   const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
   const hasTime=start&&end&&new Date(end)>new Date(start);
-  const avail=hasTime?getUAvail(id,start,end):(equipment.find(x=>x.id===id)||{qty:0}).qty;
+  const avail=hasTime?getUAvail(id,start,end):(pubEquipment.find(x=>x.id===id)||{qty:0}).qty;
   const cur=uSelectedEq[id]||0,next=Math.max(0,Math.min(avail,cur+delta));
-  if(next===0)delete uSelectedEq[id];else uSelectedEq[id]=next;
+  if(next===0){delete uSelectedEq[id];delete uAssignedCards[id];}else uSelectedEq[id]=next;
   renderUEqList();renderUSelected();
 }
 function renderUSelected(){
-  const equipment=load('equipment',[]);
   const ids=Object.keys(uSelectedEq);
   const card=document.getElementById('ub-selected-card');
   if(!ids.length){card.style.display='none';return;}
   card.style.display='block';
   document.getElementById('ub-selected-list').innerHTML=ids.map(id=>{
-    const e=equipment.find(x=>x.id===id);
+    const e=pubEquipment.find(x=>x.id===id);
     return`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${e?e.name:id}</span><span style="color:#94a3b8">× ${uSelectedEq[id]}</span></div>`;
   }).join('');
+  // Card assignment
+  const memIds=ids.filter(id=>{const e=pubEquipment.find(x=>x.id===id);return e&&(e.cardNumbers||[]).length>0;});
+  const wrap=document.getElementById('ub-card-assign-wrap');
+  if(memIds.length){
+    wrap.style.display='block';
+    document.getElementById('ub-card-assign-list').innerHTML=memIds.map(id=>{
+      const e=pubEquipment.find(x=>x.id===id);
+      const qty=uSelectedEq[id];
+      const busy=getBusyCards(id);
+      let rows='';
+      for(let i=0;i<qty;i++){
+        const cur=(uAssignedCards[id]||[])[i]||'';
+        rows+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="min-width:50px;font-size:12px;color:#6b7280">第${i+1}張</span>
+          <select onchange="setUCard('${id}',${i},this.value)" style="flex:1;padding:4px 6px;font-size:12px;border:1px solid #d1d5db;border-radius:5px">
+            <option value="">（不指定）</option>
+            ${(e.cardNumbers||[]).map(c=>`<option value="${c}" ${busy.has(c)?'disabled':''} ${cur===c?'selected':''}>${c}${busy.has(c)?' (借出中)':''}</option>`).join('')}
+          </select>
+        </div>`;
+      }
+      return`<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:#6b7280;margin-bottom:4px">${e.name}</div>${rows}</div>`;
+    }).join('');
+  }else wrap.style.display='none';
+}
+function setUCard(eqId,idx,val){
+  if(!uAssignedCards[eqId])uAssignedCards[eqId]=[];
+  uAssignedCards[eqId][idx]=val;
 }
 function addUCollabRow(){
   const div=document.createElement('div');
@@ -449,113 +509,63 @@ function getUCollabMembers(){
   }).filter(x=>x.name);
 }
 function showUE(id,show,msg){const el=document.getElementById(id);if(!el)return;el.style.display=show?'block':'none';if(msg)el.textContent=msg;}
-function submitUBorrow(){
-  const equipment=load('equipment',[]);
+
+async function submitUBorrow(){
   const name=document.getElementById('ub-name').value.trim();
   const dept=document.getElementById('ub-dept').value.trim();
   const sid=document.getElementById('ub-sid').value.trim();
   const phone=document.getElementById('ub-phone').value.trim();
   const email=document.getElementById('ub-email').value.trim();
   const cat=document.getElementById('ub-cat').value;
+  const taskName=cat==='task'?document.getElementById('ub-task-name').value.trim():'';
   const start=document.getElementById('ub-start').value;
   const end=document.getElementById('ub-end').value;
   const note=document.getElementById('ub-note').value.trim();
   const collabs=getUCollabMembers();
+
   showUE('ub-err-info',!name||!dept||!sid||!phone||!email);
   showUE('ub-err-cat',!cat);
+  showUE('ub-err-task-name',cat==='task'&&!taskName);
   showUE('ub-err-time',!start||!end||new Date(end)<=new Date(start));
   showUE('ub-err-eq',!Object.keys(uSelectedEq).length);
-  if(!name||!dept||!sid||!phone||!email||!cat||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
+  if(!name||!dept||!sid||!phone||!email||!cat||(cat==='task'&&!taskName)||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
 
-  const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>({id,qty,name:(equipment.find(x=>x.id===id)||{name:id}).name}));
-  const records=load('records',[]);
-  const members=load('members',[]);
-  const rec={id:'r'+Date.now(),name,dept,sid,phone,email,cat,start,end,note,equipment:eqItems,collabs,status:'pending',returnedItems:[],createdAt:new Date().toISOString()};
-  records.unshift(rec);save('records',records);
-  let m=members.find(x=>x.sid===sid||x.name===name);
-  if(!m){m={id:'m'+Date.now(),name,dept,sid,phone,email,taskCount:0};members.push(m);}
-  else Object.assign(m,{dept,phone,email});
-  collabs.forEach(c=>{
-    let cm=members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
-    if(!cm){cm={id:'m'+Date.now(),name:c.name,sid:c.sid,dept:'',phone:'',email:'',taskCount:0};members.push(cm);}
-    if(cat==='task')cm.taskCount=(cm.taskCount||0)+1;
+  const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>{
+    const e=pubEquipment.find(x=>x.id===id);
+    const cards=(uAssignedCards[id]||[]).filter(Boolean);
+    return{id,qty,name:(e||{name:id}).name,assignedCards:cards};
   });
-  save('members',members);
 
-  uSelectedEq={};
-  ['ub-name','ub-dept','ub-sid','ub-phone','ub-email','ub-note'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('ub-cat').value='';
-  document.getElementById('ub-collab-list').innerHTML='';
-  document.getElementById('ub-collab-section').style.display='none';
-  document.getElementById('ub-selected-card').style.display='none';
-  document.getElementById('ub-eq-search').value='';
-  document.getElementById('ub-conflict-warn').style.display='none';
-  document.getElementById('ub-time-reminder').style.display='block';
-  document.getElementById('ub-start').value='';
-  document.getElementById('ub-end').value='';
-  renderUEqList();renderUSelected();
-
-  alert(`申請已送出！\n借用人：${name}\n器材：${eqItems.map(e=>e.name+'×'+e.qty).join('、')}\n\n等待管理員審核，通過後 Email 通知。`);
-  // Switch to query so user can check status
-  verifiedUser={name,sid,phone};
-  switchSection('query');
-  showResults();
-}
-// Init
-setUDefaultTimes();
-renderUEqList();
-renderEqScheduleList();
-</script>
-
-<script>
-// ═══════════════ CLOUD BACKEND ADAPTER ═══════════════
-const CLOUD_API = '';
-async function cloudJson(url, opts={}){
-  const r=await fetch((CLOUD_API||'')+url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});
-  const text=await r.text(); let d={}; try{d=text?JSON.parse(text):{}}catch{}
-  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
-  return d;
-}
-async function memberBootstrap(){
+  const btn=document.getElementById('ub-submit-btn');
+  if(btn)btn.disabled=true;
   try{
-    const d=await cloudJson('/api/public-state');
-    localStorage.setItem('equipment',JSON.stringify(d.equipment||[]));
-    localStorage.setItem('records',JSON.stringify(d.records||[]));
-    localStorage.setItem('placeholders',JSON.stringify(d.placeholders||{}));
-    applyPlaceholders(); renderUEqList(); renderEqScheduleList();
-  }catch(e){console.error(e);}
-}
-const originalSubmitUBorrow = submitUBorrow;
-submitUBorrow = async function(){
-  const equipment=load('equipment',[]);
-  const name=document.getElementById('ub-name').value.trim(),dept=document.getElementById('ub-dept').value.trim(),sid=document.getElementById('ub-sid').value.trim(),phone=document.getElementById('ub-phone').value.trim(),email=document.getElementById('ub-email').value.trim(),cat=document.getElementById('ub-cat').value,start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value,note=document.getElementById('ub-note').value.trim();
-  const collabs=getUCollabMembers();
-  showUE('ub-err-info',!name||!dept||!sid||!phone||!email);showUE('ub-err-cat',!cat);showUE('ub-err-time',!start||!end||new Date(end)<=new Date(start));showUE('ub-err-eq',!Object.keys(uSelectedEq).length);
-  if(!name||!dept||!sid||!phone||!email||!cat||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
-  const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>({id,qty,name:(equipment.find(x=>x.id===id)||{name:id}).name}));
-  const btn=document.querySelector('#borrow-area .btn-primary'); if(btn)btn.disabled=true;
-  try{
-    const d=await cloudJson('/api/member/submit',{method:'POST',body:JSON.stringify({name,dept,sid,phone,email,cat,start,end,note,equipment:eqItems,collabs})});
-    // Keep only non-sensitive schedule data in public local cache.
-    localStorage.setItem('records',JSON.stringify(d.publicRecords||[]));
-    uSelectedEq={};['ub-name','ub-dept','ub-sid','ub-phone','ub-email','ub-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('ub-cat').value='';document.getElementById('ub-collab-list').innerHTML='';document.getElementById('ub-collab-section').style.display='none';document.getElementById('ub-selected-card').style.display='none';document.getElementById('ub-eq-search').value='';document.getElementById('ub-conflict-warn').style.display='none';document.getElementById('ub-time-reminder').style.display='block';document.getElementById('ub-start').value='';document.getElementById('ub-end').value='';renderUEqList();renderUSelected();
-    alert(`申請已送出！\n借用人：${name}\n器材：${eqItems.map(e=>e.name+'×'+e.qty).join('、')}\n\n等待管理員審核，通過後 Email 通知。`);
+    const d=await cloudJson('/api/member/submit',{method:'POST',body:JSON.stringify({name,dept,sid,phone,email,cat,taskName,start,end,note,equipment:eqItems,collabs})});
+    // Update local public records cache
+    if(d.publicRecords){
+      const map=new Map(pubRecords.map(r=>[r.id,r]));
+      d.publicRecords.forEach(r=>map.set(r.id,r));
+      pubRecords=[...map.values()];
+    }
+    uSelectedEq={};uAssignedCards={};
+    ['ub-name','ub-dept','ub-sid','ub-phone','ub-email','ub-note','ub-task-name'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    document.getElementById('ub-cat').value='';
+    document.getElementById('ub-collab-list').innerHTML='';
+    document.getElementById('ub-collab-section').style.display='none';
+    document.getElementById('ub-task-name-wrap').style.display='none';
+    document.getElementById('ub-selected-card').style.display='none';
+    document.getElementById('ub-eq-search').value='';
+    document.getElementById('ub-conflict-warn').style.display='none';
+    document.getElementById('ub-time-reminder').style.display='block';
+    document.getElementById('ub-start').value='';document.getElementById('ub-end').value='';
+    renderUEqList();renderUSelected();
+    alert(`申請已送出！\n借用人：${name}${taskName?' | 任務：'+taskName:''}\n器材：${eqItems.map(e=>e.name+'×'+e.qty+(e.assignedCards.length?' ['+e.assignedCards.join(',')+']':'')).join('、')}\n\n等待管理員審核，通過後 Email 通知。`);
     verifiedUser={name,sid,phone};switchSection('query');showResults();
   }catch(e){alert('送出失敗：'+e.message);}
   finally{if(btn)btn.disabled=false;}
-};
-doVerify = async function(){
-  const name=document.getElementById('v-name').value.trim(),sid=document.getElementById('v-sid').value.trim(),phone=document.getElementById('v-phone').value.trim();
-  if(!name||!sid||!phone){document.getElementById('v-err').textContent='請完整輸入姓名、學號、電話';document.getElementById('v-err').style.display='block';return;}
-  try{
-    const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
-    if(!d.ok){document.getElementById('v-err').textContent='資料不符，請確認後重試';document.getElementById('v-err').style.display='block';return;}
-    document.getElementById('v-err').style.display='none'; verifiedUser={name,sid,phone};
-    const publicRecords=load('records',[]); const own=d.records||[];
-    const map=new Map(publicRecords.map(r=>[r.id,r])); own.forEach(r=>map.set(r.id,r)); localStorage.setItem('records',JSON.stringify([...map.values()])); showResults();
-  }catch(e){document.getElementById('v-err').textContent='目前無法連線，請稍後再試';document.getElementById('v-err').style.display='block';}
-};
-memberBootstrap();
+}
+
+// Init
+loadPublicState();
 </script>
 </body>
 </html>
