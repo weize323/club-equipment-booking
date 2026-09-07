@@ -9,7 +9,9 @@ const ROOT = __dirname;
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, {recursive:true});
 const DB_FILE = path.join(DATA_DIR, 'data.json');
-const SESSION_TTL = 1000 * 60 * 60 * 24 * 7;
+// Session cookie: no Max-Age/Expires so it expires when browser closes
+// But keep alive in memory for the server lifetime per TTL (for refresh)
+const SESSION_TTL = 1000 * 60 * 60 * 12; // 12h server-side TTL
 
 const DEFAULT_EQ = [
   {id:'e001',name:'SONY A7C II',type:'相機',qty:1,allow:['personal','event','task'],eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[]},
@@ -124,75 +126,133 @@ const DEFAULT_EMAIL = {serviceId:'',templateId:'',pubKey:'',subject:'【器材�
 const DEFAULT_LOCATIONS = ['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER = ['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
 
-function hashPassword(pw,salt){return crypto.scryptSync(pw,salt,64).toString('hex');}
-function makePassword(pw){const salt=crypto.randomBytes(16).toString('hex');return{salt,hash:hashPassword(pw,salt)};}
-function verifyPassword(pw,rec){try{return crypto.timingSafeEqual(Buffer.from(hashPassword(pw,rec.salt),'hex'),Buffer.from(rec.hash,'hex'));}catch{return false;}}
+function hashPw(pw,salt){return crypto.scryptSync(pw,salt,64).toString('hex');}
+function makePw(pw){const salt=crypto.randomBytes(16).toString('hex');return{salt,hash:hashPw(pw,salt)};}
+function verifyPw(pw,rec){try{return crypto.timingSafeEqual(Buffer.from(hashPw(pw,rec.salt),'hex'),Buffer.from(rec.hash,'hex'));}catch{return false;}}
 
 function initialDB(){
-  return {version:2,password:makePassword(process.env.ADMIN_PASSWORD||'admin123'),
+  return {version:3,password:makePw(process.env.ADMIN_PASSWORD||'admin123'),
     records:[],members:[],equipment:DEFAULT_EQ,
     emailSettings:DEFAULT_EMAIL,placeholders:DEFAULT_PH,
     locations:DEFAULT_LOCATIONS,catOrder:DEFAULT_CAT_ORDER};
 }
+
 function readDB(){
   if(!fs.existsSync(DB_FILE)){const d=initialDB();writeDB(d);return d;}
   try{
     const d=JSON.parse(fs.readFileSync(DB_FILE,'utf8'));
-    // migrate: add new fields if missing
     if(!d.locations) d.locations=DEFAULT_LOCATIONS;
-    if(!d.catOrder) d.catOrder=DEFAULT_CAT_ORDER;
+    if(!d.catOrder)  d.catOrder=DEFAULT_CAT_ORDER;
     if(!d.placeholders) d.placeholders=DEFAULT_PH;
     if(!d.placeholders.taskName) d.placeholders.taskName=DEFAULT_PH.taskName;
-    // migrate equipment: add new fields
+    if(!d.emailSettings) d.emailSettings=DEFAULT_EMAIL;
+    // Migrate equipment: add new fields without overwriting existing
     if(d.equipment) d.equipment=d.equipment.map(e=>({
       eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[],...e
     }));
+    // Migrate members: add isOfficer field without overwriting existing
+    if(d.members) d.members=d.members.map(m=>({isOfficer:false,...m}));
+    // Migrate records: ensure required fields
+    if(d.records) d.records=d.records.map(r=>({
+      returnedItems:[],collabs:[],taskName:'',
+      ...r,
+      equipment:(r.equipment||[]).map(e=>({assignedCards:[],...e}))
+    }));
     return d;
-  }catch{const d=initialDB();writeDB(d);return d;}
+  }catch(e){
+    console.error('readDB error:',e);
+    // DO NOT initialise fresh – preserve data. Return safe empty shell.
+    return initialDB();
+  }
 }
-function writeDB(d){const tmp=DB_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(d,null,2));fs.renameSync(tmp,DB_FILE);}
+
+function writeDB(d){
+  const tmp=DB_FILE+'.tmp';
+  fs.writeFileSync(tmp,JSON.stringify(d,null,2),'utf8');
+  fs.renameSync(tmp,DB_FILE);
+}
+
 let db=readDB();
 
+// Sessions: Map<token, expiresAt>
+// No Max-Age on cookie → session-cookie behaviour (expires on browser close)
+// Server keeps token alive for SESSION_TTL from last login to survive page refresh
 const sessions=new Map();
 function cleanupSessions(){const now=Date.now();for(const[k,v]of sessions)if(v<now)sessions.delete(k);}
-setInterval(cleanupSessions,60*60*1000).unref();
+setInterval(cleanupSessions,30*60*1000).unref();
 
-function parseCookies(req){const out={};(req.headers.cookie||'').split(';').forEach(x=>{const i=x.indexOf('=');if(i>0)out[x.slice(0,i).trim()]=decodeURIComponent(x.slice(i+1).trim());});return out;}
-function isAdmin(req){const t=parseCookies(req).sid;return!!(t&&sessions.get(t)>Date.now());}
-function setSession(res){const token=crypto.randomBytes(32).toString('hex');sessions.set(token,Date.now()+SESSION_TTL);res.setHeader('Set-Cookie',`sid=${token}; HttpOnly; Path=/; SameSite=Lax${process.env.NODE_ENV==='production'?'; Secure':''}`);}
-function json(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj));}
-function body(req){return new Promise((resolve,reject)=>{let s='';req.on('data',c=>{s+=c;if(s.length>2e6)req.destroy();});req.on('end',()=>{try{resolve(s?JSON.parse(s):{});}catch(e){reject(e);}});req.on('error',reject);});}
-
-// Public records: strip private fields, keep card assignment info for schedule display
-function publicRecords(){
-  return db.records.map(r=>({
-    id:r.id,start:r.start,end:r.end,
-    equipment:(r.equipment||[]).map(e=>({id:e.id,qty:e.qty,name:e.name,assignedCards:e.assignedCards||[]})),
-    status:r.status,returnedItems:r.returnedItems||[],
-    cat:r.cat,createdAt:r.createdAt,
-    taskName:r.taskName||''
-  }));
+function parseCookies(req){
+  const out={};
+  (req.headers.cookie||'').split(';').forEach(x=>{
+    const i=x.indexOf('=');
+    if(i>0) out[x.slice(0,i).trim()]=decodeURIComponent(x.slice(i+1).trim());
+  });
+  return out;
 }
-function sendPublic(res){
-  json(res,200,{
-    equipment:db.equipment,
-    records:publicRecords(),
-    placeholders:db.placeholders,
-    locations:db.locations,
-    catOrder:db.catOrder
+function isAdmin(req){const t=parseCookies(req).sid;return!!(t&&sessions.get(t)>Date.now());}
+function setSession(res){
+  const token=crypto.randomBytes(32).toString('hex');
+  sessions.set(token,Date.now()+SESSION_TTL);
+  // NO Max-Age / Expires → session cookie (cleared on browser close)
+  const secure=process.env.NODE_ENV==='production'?'; Secure':'';
+  res.setHeader('Set-Cookie',`sid=${token}; HttpOnly; Path=/; SameSite=Lax${secure}`);
+}
+function clearSession(req,res){
+  const t=parseCookies(req).sid;
+  if(t) sessions.delete(t);
+  const secure=process.env.NODE_ENV==='production'?'; Secure':'';
+  res.setHeader('Set-Cookie',`sid=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`);
+}
+
+function json(res,status,obj){
+  res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+  res.end(JSON.stringify(obj));
+}
+function bodyJSON(req){
+  return new Promise((resolve,reject)=>{
+    let s='';
+    req.on('data',c=>{s+=c;if(s.length>4e6)req.destroy();});
+    req.on('end',()=>{try{resolve(s?JSON.parse(s):{});}catch(e){reject(e);}});
+    req.on('error',reject);
   });
 }
 
-// Backend availability check: returns occupied qty for eqId in time range
+// Public records (strip private contact info, keep schedule-relevant data)
+function publicRecords(){
+  return db.records.map(r=>({
+    id:r.id, start:r.start, end:r.end,
+    equipment:(r.equipment||[]).map(e=>({id:e.id,qty:e.qty,name:e.name,assignedCards:e.assignedCards||[]})),
+    status:r.status, returnedItems:r.returnedItems||[],
+    cat:r.cat, createdAt:r.createdAt, taskName:r.taskName||''
+  }));
+}
+
+// isOfficer helper — requires name + sid + phone all match
+function checkOfficer(name,sid,phone){
+  const m=db.members.find(x=>
+    x.name===name &&
+    x.sid===sid &&
+    x.phone===phone
+  );
+  return !!(m&&m.isOfficer);
+}
+
+// Effective allow-list: if officer + personal, treat as task for allow check
+function effectiveAllow(cat,isOfficer){
+  if(isOfficer&&cat==='personal') return 'task';
+  return cat;
+}
+
+// Occupied qty for eqId in time window, optionally excluding one record
 function getOccupied(eqId,start,end,excludeId){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   return db.records.filter(r=>{
-    if(r.id===excludeId)return false;
-    if(r.status==='pending'||r.status==='done')return false;
+    if(r.id===excludeId) return false;
+    if(r.status==='pending'||r.status==='done') return false;
     const returned=r.returnedItems||[];
     const item=(r.equipment||[]).find(x=>x.id===eqId);
-    if(!item)return false;
-    if(returned.includes(item.id+'__'+item.qty))return false;
+    if(!item) return false;
+    if(returned.includes(item.id+'__'+item.qty)) return false;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
     return true;
   }).reduce((sum,r)=>{
@@ -201,267 +261,361 @@ function getOccupied(eqId,start,end,excludeId){
   },0);
 }
 
-function normalizeRecord(x){
-  return {
-    ...x,
-    id:x.id||('r'+Date.now()),
-    status:x.status||'pending',
-    returnedItems:Array.isArray(x.returnedItems)?x.returnedItems:[],
-    createdAt:x.createdAt||new Date().toISOString(),
-    taskName:x.taskName||''
-  };
+// Cards in use for eqId during [start,end] time window, excluding one record
+// start/end are optional; if omitted, all active records are considered
+function getBusyCards(eqId,start,end,excludeId){
+  const s=start?new Date(start):null;
+  const e=end?new Date(end):null;
+  const busy=new Set();
+  db.records.forEach(r=>{
+    if(r.id===excludeId) return;
+    if(r.status==='done'||r.status==='pending') return;
+    const item=(r.equipment||[]).find(x=>x.id===eqId);
+    if(!item) return;
+    if((r.returnedItems||[]).includes(item.id+'__'+item.qty)) return;
+    // Time overlap check: existing overlaps [start,end]?
+    if(s&&e){
+      const rs=new Date(r.start),re=new Date(r.end);
+      if(!(rs<e&&re>s)) return; // no overlap → skip
+    }
+    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
+  });
+  return busy;
 }
 
 const server=http.createServer(async(req,res)=>{
   try{
     const u=new URL(req.url,'http://localhost');
-    // Static pages
-    if(req.method==='GET'&&(u.pathname==='/'||u.pathname==='/index.html'))
+    const p=u.pathname;
+    const m=req.method;
+
+    // ── Static pages ──
+    if(m==='GET'&&(p==='/'||p==='/index.html'))
       return fs.createReadStream(path.join(ROOT,'index.html')).pipe(res);
-    if(req.method==='GET'&&u.pathname==='/admin')
+    if(m==='GET'&&p==='/admin')
       return fs.createReadStream(path.join(ROOT,'admin.html')).pipe(res);
-    if(req.method==='GET'&&u.pathname==='/api/health')
-      return json(res,200,{ok:true});
+    if(m==='GET'&&p==='/api/health')
+      return json(res,200,{ok:true,records:db.records.length,members:db.members.length,equipment:db.equipment.length});
 
-    // Public state (equipment + schedule records + placeholders + locations + catOrder)
-    if(req.method==='GET'&&u.pathname==='/api/public-state')
-      return sendPublic(res);
-
-    // Admin login
-    if(req.method==='POST'&&u.pathname==='/api/admin/login'){
-      const b=await body(req);
-      if(!verifyPassword(String(b.password||''),db.password))return json(res,401,{error:'密碼錯誤'});
-      setSession(res);return json(res,200,{ok:true});
-    }
-
-    // Admin full state
-    if(req.method==='GET'&&u.pathname==='/api/admin/state'){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+    // ── Public state (members includes isOfficer flag for index.html) ──
+    if(m==='GET'&&p==='/api/public-state'){
       return json(res,200,{
-        records:db.records,members:db.members,equipment:db.equipment,
-        emailSettings:db.emailSettings,placeholders:db.placeholders,
-        locations:db.locations,catOrder:db.catOrder
+        equipment:db.equipment,
+        records:publicRecords(),
+        placeholders:db.placeholders,
+        locations:db.locations,
+        catOrder:db.catOrder,
+        // Expose officer list (name+sid only) so index.html can check without full member data
+        officerList:db.members.filter(x=>x.isOfficer).map(x=>({name:x.name,sid:x.sid,phone:x.phone}))
       });
     }
 
-    // Admin update any top-level key
-    if(req.method==='PUT'&&u.pathname.startsWith('/api/admin/state/')){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      const key=decodeURIComponent(u.pathname.split('/').pop());
-      const b=await body(req);
+    // ── Admin login ──
+    if(m==='POST'&&p==='/api/admin/login'){
+      const b=await bodyJSON(req);
+      if(!verifyPw(String(b.password||''),db.password)) return json(res,401,{error:'密碼錯誤'});
+      setSession(res);
+      return json(res,200,{ok:true});
+    }
+
+    // ── Admin logout ──
+    if(m==='POST'&&p==='/api/admin/logout'){
+      clearSession(req,res);
+      return json(res,200,{ok:true});
+    }
+
+    // ── Admin: check session ──
+    if(m==='GET'&&p==='/api/admin/check'){
+      return json(res,200,{ok:isAdmin(req)});
+    }
+
+    // ── Admin full state ──
+    if(m==='GET'&&p==='/api/admin/state'){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      return json(res,200,{
+        records:db.records, members:db.members, equipment:db.equipment,
+        emailSettings:db.emailSettings, placeholders:db.placeholders,
+        locations:db.locations, catOrder:db.catOrder
+      });
+    }
+
+    // ── Admin bulk update any top-level key ──
+    if(m==='PUT'&&p.startsWith('/api/admin/state/')){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      const key=decodeURIComponent(p.split('/').pop());
+      const b=await bodyJSON(req);
       const allowed=['records','members','equipment','emailSettings','placeholders','locations','catOrder'];
-      if(!allowed.includes(key))return json(res,400,{error:'不允許的欄位'});
-      db[key]=b.value;writeDB(db);return json(res,200,{ok:true});
+      if(!allowed.includes(key)) return json(res,400,{error:'不允許的欄位'});
+      db[key]=b.value; writeDB(db);
+      return json(res,200,{ok:true});
     }
 
-    // Admin change password
-    if(req.method==='POST'&&u.pathname==='/api/admin/password'){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      const b=await body(req);
-      if(!verifyPassword(String(b.oldPassword||''),db.password))return json(res,400,{error:'目前密碼不正確'});
-      if(String(b.newPassword||'').length<6)return json(res,400,{error:'新密碼至少 6 碼'});
-      db.password=makePassword(String(b.newPassword));writeDB(db);return json(res,200,{ok:true});
+    // ── Admin change password ──
+    if(m==='POST'&&p==='/api/admin/password'){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      if(!verifyPw(String(b.oldPassword||''),db.password)) return json(res,400,{error:'目前密碼不正確'});
+      if(String(b.newPassword||'').length<4) return json(res,400,{error:'新密碼至少 4 碼'});
+      db.password=makePw(String(b.newPassword)); writeDB(db);
+      return json(res,200,{ok:true});
     }
 
-    // Member submit borrow request (with backend validation)
-    if(req.method==='POST'&&u.pathname==='/api/member/submit'){
-      const b=await body(req);
-      const required=['name','dept','sid','phone','email','cat','start','end'];
-      if(required.some(k=>!String(b[k]||'').trim()))return json(res,400,{error:'資料不完整'});
-      if(new Date(b.end)<=new Date(b.start))return json(res,400,{error:'借用時間不正確'});
-      if(!Array.isArray(b.equipment)||!b.equipment.length)return json(res,400,{error:'至少選擇一項器材'});
-      if(b.cat==='task'&&!String(b.taskName||'').trim())return json(res,400,{error:'社內任務必須填寫任務名稱'});
+    // ── Admin full edit a record ──
+    if(m==='PUT'&&p.match(/^\/api\/admin\/records\/[^/]+$/)){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const idx=db.records.findIndex(r=>r.id===recId);
+      if(idx===-1) return json(res,404,{error:'紀錄不存在'});
 
-      // Backend check: disabled equipment cannot be borrowed
-      const disabledItems=[];
+      // Validate
+      if(!b.name||!b.dept||!b.sid||!b.phone||!b.email) return json(res,400,{error:'借用人資料不完整'});
+      if(!b.cat||!['personal','event','task'].includes(b.cat)) return json(res,400,{error:'借用類別無效'});
+      if(b.cat==='task'&&!String(b.taskName||'').trim()) return json(res,400,{error:'社內任務必須填寫任務名稱'});
+      if(!b.start||!b.end) return json(res,400,{error:'時間不完整'});
+      if(new Date(b.end)<=new Date(b.start)) return json(res,400,{error:'歸還時間必須晚於借出時間'});
+      if(!Array.isArray(b.equipment)||!b.equipment.length) return json(res,400,{error:'至少需要一項器材'});
+
+      // Validate each equipment item
       for(const item of b.equipment){
         const eq=db.equipment.find(e=>e.id===item.id);
-        if(!eq)continue;
-        if(eq.eqStatus==='disabled')disabledItems.push(eq.name);
-        // Also verify allow list
-        if(!(eq.allow||[]).includes(b.cat))disabledItems.push(eq.name+'（此類別不可借）');
+        if(!eq) return json(res,400,{error:`器材不存在：${item.id}`});
+        const qty=Number(item.qty);
+        if(!Number.isInteger(qty)||qty<1) return json(res,400,{error:`器材數量無效：${eq.name}`});
+        if(qty>eq.qty) return json(res,400,{error:`${eq.name} 數量 ${qty} 超過總數 ${eq.qty}`});
+        // Inventory check: other records occupying this eq in the same time window
+        const occupied=getOccupied(eq.id,b.start,b.end,recId);
+        if(occupied+qty>eq.qty) return json(res,400,{error:`${eq.name} 此時段庫存不足（已被借 ${occupied} 台，總共 ${eq.qty} 台，本次需要 ${qty} 台）`});
+        // Card validation
+        if((eq.cardNumbers||[]).length>0){
+          const cards=(item.assignedCards||[]).filter(Boolean);
+          const valid=new Set(eq.cardNumbers);
+          // Each card must exist in cardNumbers
+          const invalid=cards.filter(c=>!valid.has(c));
+          if(invalid.length) return json(res,400,{error:`${eq.name} 卡號不存在：${invalid.join('、')}`});
+          // No duplicate cards within this item
+          if(new Set(cards).size!==cards.length) return json(res,400,{error:`${eq.name} 指定卡號有重複`});
+          // Cards must not exceed qty
+          if(cards.length>qty) return json(res,400,{error:`${eq.name} 指定卡號數量（${cards.length}）超過借用數量（${qty}）`});
+          // Check against other active records in same time window
+          const busy=getBusyCards(eq.id,b.start,b.end,recId);
+          const conflicts=cards.filter(c=>busy.has(c));
+          if(conflicts.length) return json(res,400,{error:`${eq.name} 卡號已被此時段其他借用占用：${conflicts.join('、')}`});
+        }
       }
-      if(disabledItems.length)return json(res,400,{error:'以下器材目前不可借用：'+disabledItems.join('、')});
 
-      const rec=normalizeRecord({
-        name:String(b.name).trim(),dept:String(b.dept).trim(),
-        sid:String(b.sid).trim(),phone:String(b.phone).trim(),
-        email:String(b.email).trim(),cat:b.cat,
+      // Preserve fields that admin edit should not touch
+      const old=db.records[idx];
+      const updated={
+        ...old,
+        name:String(b.name).trim(),
+        dept:String(b.dept).trim(),
+        sid:String(b.sid).trim(),
+        phone:String(b.phone).trim(),
+        email:String(b.email).trim(),
+        cat:b.cat,
         taskName:String(b.taskName||'').trim(),
-        start:b.start,end:b.end,
+        start:b.start,
+        end:b.end,
+        note:String(b.note||'').trim(),
+        equipment:b.equipment.map(e=>({
+          id:e.id,
+          qty:Number(e.qty),
+          name:e.name||(db.equipment.find(x=>x.id===e.id)||{name:e.id}).name,
+          assignedCards:Array.isArray(e.assignedCards)?e.assignedCards.filter(Boolean):[],
+        })),
+        // Rebuild returnedItems: only keep keys that match current equipment qty
+        returnedItems:(()=>{
+          const raw=Array.isArray(b.returnedItems)?b.returnedItems:old.returnedItems||[];
+          // Filter to only valid keys matching new equipment list
+          const validKeys=new Set((b.equipment||[]).map(e=>e.id+'__'+Number(e.qty)));
+          return raw.filter(k=>validKeys.has(k));
+        })(),
+        updatedAt:new Date().toISOString()
+      };
+      // status is computed dynamically, never store a client-provided status
+      // keep the stored status field only for 'pending'/'done'/'approved'
+      // (computeStatus on frontend derives display from time + returnedItems)
+      if(b.forceStatus==='done'||updated.returnedItems.length>0){
+        const allEq=updated.equipment||[];
+        if(allEq.length>0&&allEq.every(e=>updated.returnedItems.includes(e.id+'__'+e.qty))){
+          updated.status='done';
+          if(!updated.returnedAt) updated.returnedAt=new Date().toISOString();
+        }
+      }
+      db.records[idx]=updated;
+      writeDB(db);
+      return json(res,200,{ok:true,record:updated,publicRecords:publicRecords()});
+    }
+
+    // ── Admin: update assigned cards for one equipment item ──
+    if(m==='PATCH'&&p.match(/^\/api\/admin\/records\/[^/]+\/cards$/)){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const rec=db.records.find(r=>r.id===recId);
+      if(!rec) return json(res,404,{error:'紀錄不存在'});
+      const item=(rec.equipment||[]).find(e=>e.id===b.eqId);
+      if(!item) return json(res,404,{error:'器材不存在於此紀錄'});
+      const eq=db.equipment.find(e=>e.id===b.eqId);
+      if(eq&&(eq.cardNumbers||[]).length>0){
+        const cards=(b.assignedCards||[]).filter(Boolean);
+        const valid=new Set(eq.cardNumbers);
+        const invalid=cards.filter(c=>!valid.has(c));
+        if(invalid.length) return json(res,400,{error:'卡號不存在：'+invalid.join('、')});
+        if(new Set(cards).size!==cards.length) return json(res,400,{error:'指定卡號有重複'});
+        if(cards.length>item.qty) return json(res,400,{error:`卡號數量（${cards.length}）超過借用數量（${item.qty}）`});
+        // Use record's own start/end for time-window busy check
+        const busy=getBusyCards(b.eqId,rec.start,rec.end,recId);
+        const conflict=cards.filter(c=>busy.has(c));
+        if(conflict.length) return json(res,400,{error:'卡號已被此時段其他借用占用：'+conflict.join('、')});
+      }
+      item.assignedCards=Array.isArray(b.assignedCards)?b.assignedCards.filter(Boolean):[];
+      writeDB(db);
+      return json(res,200,{ok:true});
+    }
+
+    // ── Member submit borrow ──
+    if(m==='POST'&&p==='/api/member/submit'){
+      const b=await bodyJSON(req);
+      const required=['name','dept','sid','phone','email','cat','start','end'];
+      if(required.some(k=>!String(b[k]||'').trim())) return json(res,400,{error:'資料不完整'});
+      if(new Date(b.end)<=new Date(b.start)) return json(res,400,{error:'借用時間不正確'});
+      if(!Array.isArray(b.equipment)||!b.equipment.length) return json(res,400,{error:'至少選擇一項器材'});
+      if(b.cat==='task'&&!String(b.taskName||'').trim()) return json(res,400,{error:'社內任務必須填寫任務名稱'});
+
+      // Backend officer check — require name + sid + phone all match
+      const isOfficer=checkOfficer(String(b.name).trim(),String(b.sid).trim(),String(b.phone).trim());
+      const effCat=effectiveAllow(b.cat,isOfficer);
+
+      const errors=[];
+      for(const item of b.equipment){
+        const eq=db.equipment.find(e=>e.id===item.id);
+        if(!eq){errors.push(`器材不存在`);continue;}
+        if(eq.eqStatus==='disabled'){errors.push(eq.name+'（停用）');continue;}
+        if(!(eq.allow||[]).includes(effCat)){errors.push(eq.name+'（此類別不可借）');}
+        // Card conflict check with time-window overlap
+        if((eq.cardNumbers||[]).length>0&&Array.isArray(item.assignedCards)){
+          const cards=item.assignedCards.filter(Boolean);
+          const valid=new Set(eq.cardNumbers);
+          const badCards=cards.filter(c=>!valid.has(c));
+          if(badCards.length) errors.push(`${eq.name} 卡號不存在：${badCards.join(',')}`);
+          if(new Set(cards).size!==cards.length) errors.push(`${eq.name} 指定卡號有重複`);
+          if(cards.length>item.qty) errors.push(`${eq.name} 卡號數量超過借用數量`);
+          const busy=getBusyCards(item.id,b.start,b.end,null);
+          const conflict=cards.filter(c=>busy.has(c));
+          if(conflict.length) errors.push(`${eq.name} 卡號 ${conflict.join(',')} 此時段已借出`);
+        }
+      }
+      if(errors.length) return json(res,400,{error:'以下器材不可借用：'+errors.join('、')});
+
+      const rec={
+        id:'r'+Date.now(),
+        name:String(b.name).trim(), dept:String(b.dept).trim(),
+        sid:String(b.sid).trim(),   phone:String(b.phone).trim(),
+        email:String(b.email).trim(), cat:b.cat,
+        taskName:String(b.taskName||'').trim(),
+        start:b.start, end:b.end,
         note:String(b.note||'').trim(),
         equipment:(b.equipment||[]).map(e=>({
-          id:e.id,qty:e.qty,name:e.name,
-          assignedCards:Array.isArray(e.assignedCards)?e.assignedCards:[]
+          id:e.id, qty:e.qty, name:e.name,
+          assignedCards:Array.isArray(e.assignedCards)?e.assignedCards.filter(Boolean):[]
         })),
         collabs:Array.isArray(b.collabs)?b.collabs:[],
-        status:'pending',returnedItems:[]
-      });
+        status:'pending', returnedItems:[],
+        createdAt:new Date().toISOString()
+      };
       db.records.unshift(rec);
 
       // Upsert member
-      let m=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
-      if(!m){m={id:'m'+Date.now(),name:rec.name,dept:rec.dept,sid:rec.sid,phone:rec.phone,email:rec.email,taskCount:0};db.members.push(m);}
-      else Object.assign(m,{dept:rec.dept,phone:rec.phone,email:rec.email});
-
-      // Collab members task count
+      let mem=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
+      if(!mem){
+        mem={id:'m'+Date.now(),name:rec.name,dept:rec.dept,sid:rec.sid,
+             phone:rec.phone,email:rec.email,taskCount:0,isOfficer:false};
+        db.members.push(mem);
+      } else {
+        Object.assign(mem,{dept:rec.dept,phone:rec.phone,email:rec.email});
+      }
+      // Collab task count
       for(const c of rec.collabs){
-        if(!c.name)continue;
+        if(!c.name) continue;
         let cm=db.members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
-        if(!cm){cm={id:'m'+Date.now()+Math.random(),name:c.name,sid:c.sid||'',dept:'',phone:'',email:'',taskCount:0};db.members.push(cm);}
-        if(rec.cat==='task')cm.taskCount=(cm.taskCount||0)+1;
+        if(!cm){cm={id:'m'+Date.now()+Math.random(),name:c.name,sid:c.sid||'',dept:'',phone:'',email:'',taskCount:0,isOfficer:false};db.members.push(cm);}
+        if(rec.cat==='task') cm.taskCount=(cm.taskCount||0)+1;
       }
       writeDB(db);
       return json(res,200,{ok:true,id:rec.id,publicRecords:publicRecords()});
     }
 
-    // Member verify identity
-    if(req.method==='POST'&&u.pathname==='/api/member/verify'){
-      const b=await body(req);
-      const name=String(b.name||'').trim(),sid=String(b.sid||'').trim(),phone=String(b.phone||'').trim();
-      const member=db.members.find(m=>m.name===name&&m.sid===sid&&m.phone===phone);
+    // ── Member verify identity ──
+    if(m==='POST'&&p==='/api/member/verify'){
+      const b=await bodyJSON(req);
+      const name=String(b.name||'').trim(), sid=String(b.sid||'').trim(), phone=String(b.phone||'').trim();
+      const member=db.members.find(x=>x.name===name&&x.sid===sid&&x.phone===phone);
       const recs=db.records.filter(r=>r.name===name&&r.sid===sid&&r.phone===phone);
-      if(!member&&!recs.length)return json(res,200,{ok:false,records:[]});
-      return json(res,200,{ok:true,records:recs});
+      if(!member&&!recs.length) return json(res,200,{ok:false,records:[],isOfficer:false});
+      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer)});
     }
 
-
-
-    // Admin: import legacy localStorage data (merge mode)
-    if(req.method==='POST'&&u.pathname==='/api/admin/import-legacy'){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      const b=await body(req);
-      const mode=b.mode||'merge'; // 'merge' or 'overwrite'
+    // ── Admin import legacy localStorage data ──
+    if(m==='POST'&&p==='/api/admin/import-legacy'){
+      if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const mode=b.mode||'merge';
       const report={added:{},skipped:{},merged:{}};
 
-      // ── EQUIPMENT ──
       if(Array.isArray(b.equipment)&&b.equipment.length){
-        const legacyEq=b.equipment.map(e=>({
-          eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[],
-          ...e
-        }));
-        if(mode==='overwrite'){
-          db.equipment=legacyEq;
-          report.merged.equipment=legacyEq.length;
-        }else{
-          // merge: keep existing, add only those whose id or name don't exist
+        const legacyEq=b.equipment.map(e=>({eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[],...e}));
+        if(mode==='overwrite'){db.equipment=legacyEq;report.merged.equipment=legacyEq.length;}
+        else{
           const existIds=new Set(db.equipment.map(e=>e.id));
           const existNames=new Set(db.equipment.map(e=>e.name));
           let added=0,skipped=0;
-          for(const e of legacyEq){
-            if(existIds.has(e.id)||existNames.has(e.name)){skipped++;continue;}
-            db.equipment.push(e);added++;
-          }
-          report.added.equipment=added;
-          report.skipped.equipment=skipped;
+          for(const e of legacyEq){if(existIds.has(e.id)||existNames.has(e.name)){skipped++;continue;}db.equipment.push(e);added++;}
+          report.added.equipment=added; report.skipped.equipment=skipped;
         }
       }
-
-      // ── MEMBERS ──
       if(Array.isArray(b.members)&&b.members.length){
-        if(mode==='overwrite'){
-          db.members=b.members;
-          report.merged.members=b.members.length;
-        }else{
-          const existIds=new Set(db.members.map(m=>m.id));
-          const existSids=new Set(db.members.filter(m=>m.sid).map(m=>m.sid));
+        const legacyM=b.members.map(x=>({isOfficer:false,...x}));
+        if(mode==='overwrite'){db.members=legacyM;report.merged.members=legacyM.length;}
+        else{
+          const existIds=new Set(db.members.map(x=>x.id));
+          const existSids=new Set(db.members.filter(x=>x.sid).map(x=>x.sid));
           let added=0,skipped=0;
-          for(const m of b.members){
-            if(existIds.has(m.id)||(m.sid&&existSids.has(m.sid))){skipped++;continue;}
-            db.members.push(m);added++;
-          }
-          report.added.members=added;
-          report.skipped.members=skipped;
+          for(const m of legacyM){if(existIds.has(m.id)||(m.sid&&existSids.has(m.sid))){skipped++;continue;}db.members.push(m);added++;}
+          report.added.members=added; report.skipped.members=skipped;
         }
       }
-
-      // ── RECORDS ──
       if(Array.isArray(b.records)&&b.records.length){
-        const legacyRecords=b.records.map(r=>({
-          returnedItems:[],collabs:[],taskName:'',assignedCards:[],
-          ...r,
-          equipment:(r.equipment||[]).map(e=>({
-            assignedCards:[],
-            ...e
-          }))
-        }));
-        if(mode==='overwrite'){
-          db.records=legacyRecords;
-          report.merged.records=legacyRecords.length;
-        }else{
+        const legacyR=b.records.map(r=>({returnedItems:[],collabs:[],taskName:'',...r,equipment:(r.equipment||[]).map(e=>({assignedCards:[],...e}))}));
+        if(mode==='overwrite'){db.records=legacyR;report.merged.records=legacyR.length;}
+        else{
           const existIds=new Set(db.records.map(r=>r.id));
           let added=0,skipped=0;
-          for(const r of legacyRecords){
-            if(existIds.has(r.id)){skipped++;continue;}
-            db.records.push(r);added++;
-          }
-          report.added.records=added;
-          report.skipped.records=skipped;
+          for(const r of legacyR){if(existIds.has(r.id)){skipped++;continue;}db.records.push(r);added++;}
+          report.added.records=added; report.skipped.records=skipped;
         }
-        // Sort by createdAt desc
         db.records.sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
       }
-
-      // ── PLACEHOLDERS ──
-      if(b.placeholders&&typeof b.placeholders==='object'){
-        db.placeholders={...db.placeholders,...b.placeholders};
-        report.merged.placeholders=true;
-      }
-
-      // ── EMAIL SETTINGS ──
-      if(b.emailSettings&&typeof b.emailSettings==='object'){
-        db.emailSettings={...db.emailSettings,...b.emailSettings};
-        report.merged.emailSettings=true;
-      }
-
-      // ── LOCATIONS ──
+      if(b.placeholders&&typeof b.placeholders==='object'){db.placeholders={...db.placeholders,...b.placeholders};report.merged.placeholders=true;}
+      if(b.emailSettings&&typeof b.emailSettings==='object'){db.emailSettings={...db.emailSettings,...b.emailSettings};report.merged.emailSettings=true;}
       if(Array.isArray(b.locations)&&b.locations.length){
-        const existing=new Set(db.locations);
-        const newLocs=b.locations.filter(l=>!existing.has(l));
-        db.locations=[...db.locations,...newLocs];
-        report.added.locations=newLocs.length;
+        const ex=new Set(db.locations);const nl=b.locations.filter(l=>!ex.has(l));
+        db.locations=[...db.locations,...nl];report.added.locations=nl.length;
       }
-
-      // ── CAT ORDER ──
-      if(Array.isArray(b.catOrder)&&b.catOrder.length&&mode==='overwrite'){
-        db.catOrder=b.catOrder;
-        report.merged.catOrder=true;
-      }
-
+      if(Array.isArray(b.catOrder)&&b.catOrder.length&&mode==='overwrite'){db.catOrder=b.catOrder;report.merged.catOrder=true;}
       writeDB(db);
-      return json(res,200,{ok:true,report,
-        totals:{records:db.records.length,members:db.members.length,equipment:db.equipment.length}});
+      return json(res,200,{ok:true,report,totals:{records:db.records.length,members:db.members.length,equipment:db.equipment.length}});
     }
 
-    // Admin: update assigned cards for one equipment item in a record
-    if(req.method==='PATCH'&&u.pathname.match(/^\/api\/admin\/records\/[^/]+\/cards$/)){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      const recId=u.pathname.split('/')[4];
-      const b=await body(req);
-      // b = { eqId, assignedCards: string[] }
-      const rec=db.records.find(r=>r.id===recId);
-      if(!rec)return json(res,404,{error:'紀錄不存在'});
-      const item=(rec.equipment||[]).find(e=>e.id===b.eqId);
-      if(!item)return json(res,404,{error:'器材不存在於此紀錄'});
-      // Validate: cards must exist in equipment.cardNumbers
-      const eq=db.equipment.find(e=>e.id===b.eqId);
-      if(eq&&(eq.cardNumbers||[]).length>0){
-        const valid=new Set(eq.cardNumbers);
-        const invalid=(b.assignedCards||[]).filter(c=>c&&!valid.has(c));
-        if(invalid.length)return json(res,400,{error:'卡號不存在：'+invalid.join('、')});
-      }
-      item.assignedCards=Array.isArray(b.assignedCards)?b.assignedCards.filter(Boolean):[];
-      writeDB(db);
-      return json(res,200,{ok:true,record:rec});
-    }
-
-    // Static file fallback
-    if(req.method==='GET'){
-      const fp=path.normalize(path.join(ROOT,u.pathname));
+    // ── Static file fallback ──
+    if(m==='GET'){
+      const fp=path.normalize(path.join(ROOT,p));
       if(fp.startsWith(ROOT)&&fs.existsSync(fp)&&fs.statSync(fp).isFile())
         return fs.createReadStream(fp).pipe(res);
     }
     json(res,404,{error:'Not found'});
   }catch(e){console.error(e);json(res,500,{error:'伺服器錯誤'});}
 });
+
 server.listen(PORT,()=>console.log(`器材借用系統 running on port ${PORT}`));
