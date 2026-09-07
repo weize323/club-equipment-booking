@@ -197,7 +197,7 @@ async function cloudJson(url,opts={}){
 }
 
 // ═══ STATE (in-memory from server) ═══
-let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[];
+let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[],pubOfficerList=[];
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
@@ -227,10 +227,20 @@ async function loadPublicState(){
   pubPlaceholders=d.placeholders||{};
   pubLocations=d.locations||[];
   pubCatOrder=d.catOrder||[];
+  pubOfficerList=d.officerList||[];
   applyPlaceholders();
   setUDefaultTimes();
   renderUEqList();
   renderEqScheduleList('sch-search','sch-eq-list');
+}
+
+// Check if current form user is an officer (name+sid+phone must all match)
+function isCurrentUserOfficer(){
+  const name=(document.getElementById('ub-name').value||'').trim();
+  const sid =(document.getElementById('ub-sid').value||'').trim();
+  const phone=(document.getElementById('ub-phone').value||'').trim();
+  if(!name||!sid||!phone) return false;
+  return pubOfficerList.some(o=>o.name===name&&o.sid===sid&&o.phone===phone);
 }
 
 function applyPlaceholders(){
@@ -257,7 +267,7 @@ async function doVerify(){
     const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
     if(!d.ok){document.getElementById('v-err').textContent='資料不符，請確認後重試';document.getElementById('v-err').style.display='block';return;}
     document.getElementById('v-err').style.display='none';
-    verifiedUser={name,sid,phone};
+    verifiedUser={name,sid,phone,isOfficer:!!(d.isOfficer)};
     // Merge public records with private ones
     const own=d.records||[];
     const map=new Map(pubRecords.map(r=>[r.id,r]));
@@ -413,9 +423,16 @@ function renderUEqList(){
   const search=(document.getElementById('ub-eq-search').value||'').toLowerCase();
   const el=document.getElementById('ub-eq-list');
   if(!cat){el.innerHTML='<div style="color:#94a3b8;padding:8px 0;font-size:13px">請先選擇借用類別</div>';return;}
+  // Officer check: if personal + officer, use task allow rules for display
+  const effectiveCat=(cat==='personal'&&isCurrentUserOfficer())?'task':cat;
   const items=pubEquipment.filter(e=>{
     if(e.eqStatus==='disabled'||e.eqStatus==='lost')return false;
-    if(!(e.allow||[]).includes(cat))return false;
+    // For officer personal borrow: show if allow contains personal OR task
+    if(effectiveCat==='task'&&cat==='personal'){
+      if(!(e.allow||[]).includes('personal')&&!(e.allow||[]).includes('task'))return false;
+    } else {
+      if(!(e.allow||[]).includes(effectiveCat))return false;
+    }
     if(uEqFilter!=='all'&&e.type!==uEqFilter)return false;
     if(search&&!e.name.toLowerCase().includes(search))return false;
     return true;
@@ -563,6 +580,14 @@ async function submitUBorrow(){
   }catch(e){alert('送出失敗：'+e.message);}
   finally{if(btn)btn.disabled=false;}
 }
+
+// Re-render eq list when user changes name/sid/phone (officer status may change)
+['ub-name','ub-sid','ub-phone'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',()=>{
+    if(document.getElementById('ub-cat').value) renderUEqList();
+  });
+});
 
 // Init
 loadPublicState();
