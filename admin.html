@@ -90,6 +90,8 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .loc-chip{font-size:10px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;margin-left:3px}
 .own-chip{font-size:10px;background:#f5f3ff;color:#5b21b6;border-radius:4px;padding:1px 5px;margin-left:3px}
 .time-reminder{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:7px 10px;font-size:12px;color:#854d0e;margin-bottom:8px}
+.badge-officer{background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;padding:1px 6px;border-radius:20px;font-weight:600}
+.badge-normal{background:#f1f5f9;color:#64748b;font-size:10px;padding:1px 6px;border-radius:20px}
 </style>
 </head>
 <body>
@@ -113,7 +115,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <button class="nav-btn" onclick="showPage('equipment')">器材管理</button>
   <button class="nav-btn" onclick="showPage('stats')">統計</button>
   <button class="nav-btn" onclick="showPage('settings')">設定</button>
-  <span id="admin-badge">管理員</span>
+  <span id="admin-badge">管理員</span><button class="nav-btn" onclick="adminLogout()" style="color:#f87171;margin-left:8px">登出</button>
 </div>
 
 <!-- PAGE: 新增借用 -->
@@ -242,7 +244,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div class="card">
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>姓名</th><th>系級</th><th>學號</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
+        <thead><tr><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
         <tbody id="members-body"></tbody>
       </table>
     </div>
@@ -423,6 +425,10 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
     <label>Gmail</label><input type="email" id="m-email">
     <div class="err" id="err-m-name" style="display:none">請輸入姓名</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;margin-top:12px">
+      <input type="checkbox" id="m-isOfficer" style="width:auto">
+      <span>幹部（個人借用可借社內任務器材）</span>
+    </label>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-member')">取消</button>
       <button class="btn btn-primary" onclick="saveMember()">儲存</button>
@@ -543,6 +549,52 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   </div>
 </div>
 
+
+<!-- Modal: 完整編輯借用紀錄 -->
+<div class="modal-bg" id="modal-edit-record">
+  <div class="modal" style="width:700px;max-width:97vw">
+    <h3>✏️ 編輯借用紀錄</h3>
+    <input type="hidden" id="er-id">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">借用人資訊</div>
+        <label>姓名 *</label><input type="text" id="er-name">
+        <label>系級 *</label><input type="text" id="er-dept">
+        <label>學號 *</label><input type="text" id="er-sid">
+        <label>電話 *</label><input type="tel" id="er-phone">
+        <label>Gmail *</label><input type="email" id="er-email">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">借用資訊</div>
+        <label>借用類別 *</label>
+        <select id="er-cat">
+          <option value="personal">個人借用</option>
+          <option value="event">成發拍攝</option>
+          <option value="task">社內任務</option>
+        </select>
+        <div id="er-taskname-wrap">
+          <label>任務名稱 *</label><input type="text" id="er-taskname" placeholder="例：115_08_23_什麼度冬東">
+        </div>
+        <label>借出時間 *</label><input type="datetime-local" id="er-start">
+        <label>預計歸還時間 *</label><input type="datetime-local" id="er-end">
+        <label>備註</label><textarea id="er-note" rows="2" style="resize:vertical"></textarea>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f0f0f0">
+        器材與歸還狀態
+        <span style="font-size:11px;font-weight:400;color:#9ca3af">（勾選「已還」表示該器材已歸還）</span>
+      </div>
+      <div id="er-eq-list" style="max-height:260px;overflow-y:auto"></div>
+      <button class="btn btn-sm" onclick="erAddEqRow()" style="margin-top:8px">+ 新增器材</button>
+    </div>
+    <div class="err" id="er-err" style="display:none;margin-top:8px"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-edit-record')">取消</button>
+      <button class="btn btn-primary" id="er-save-btn" onclick="saveEditRecord()">儲存變更</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal: 指定記憶卡卡號 -->
 <div class="modal-bg" id="modal-card-assign">
@@ -677,8 +729,11 @@ function getAvail(eqId,start,end,excludeId){
   if(!e||e.eqStatus==='disabled'||e.eqStatus==='lost')return 0;
   return Math.max(0,e.qty-getOccupied(eqId,start,end,excludeId));
 }
-// Get assigned card numbers currently in use for this eq group
-function getBusyCards(eqId,excludeId){
+// Cards in use for eqId during [start,end] window, excluding one record
+// start/end optional: if omitted, all active records considered
+function getBusyCards(eqId,start,end,excludeId){
+  const s=start?new Date(start):null;
+  const e=end?new Date(end):null;
   const busy=new Set();
   records.forEach(r=>{
     if(r.id===excludeId)return;
@@ -686,7 +741,8 @@ function getBusyCards(eqId,excludeId){
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
     if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
-    (item.assignedCards||[]).forEach(c=>busy.add(c));
+    if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
+    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
   });
   return busy;
 }
@@ -726,9 +782,20 @@ function renderEqList(){
   const search=(document.getElementById('eq-search').value||'').toLowerCase();
   const el=document.getElementById('eq-list');
   if(!cat){el.innerHTML='<div class="text-muted" style="padding:8px 0">請先選擇借用類別</div>';return;}
+  // Officer: if borrower is officer + personal, apply task allow rules
+  const bName=(document.getElementById('b-name').value||'').trim();
+  const bSid=(document.getElementById('b-sid').value||'').trim();
+  const bPhone=(document.getElementById('b-phone').value||'').trim();
+  const borrowerIsOfficer=bName&&bSid&&bPhone&&members.some(m=>m.name===bName&&m.sid===bSid&&m.phone===bPhone&&m.isOfficer===true);
+  const effectiveCat=(cat==='personal'&&borrowerIsOfficer)?'task':cat;
   const items=equipment.filter(e=>{
     if(e.eqStatus==='disabled'||e.eqStatus==='lost')return false;
-    if(!(e.allow||[]).includes(cat))return false;
+    if(effectiveCat==='task'&&cat==='personal'){
+      // Officer personal: show if allow has personal OR task
+      if(!(e.allow||[]).includes('personal')&&!(e.allow||[]).includes('task'))return false;
+    } else {
+      if(!(e.allow||[]).includes(effectiveCat))return false;
+    }
     if(eqFilter!=='all'&&e.type!==eqFilter)return false;
     if(search&&!e.name.toLowerCase().includes(search))return false;
     return true;
@@ -785,7 +852,7 @@ function renderSelected(){
     document.getElementById('card-assign-list').innerHTML=memIds.map(id=>{
       const e=equipment.find(x=>x.id===id);
       const qty=selectedEq[id];
-      const busy=getBusyCards(id);
+      const busy=getBusyCards(id,start||null,end||null,null);
       const avail=(e.cardNumbers||[]).filter(c=>!busy.has(c));
       let rows='';
       for(let i=0;i<qty;i++){
@@ -941,6 +1008,7 @@ function renderRecords(){
     const actionBtns=r.cs==='pending'
       ?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">審核</button>`
       :r.cs!=='done'?`<button class="btn btn-sm btn-warn" onclick="openReturn('${r.id}')">歸還</button>`:'';
+    const editRecBtn=`<button class="btn btn-sm" style="margin-top:2px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe" onclick="openEditRecord('${r.id}')">✏️ 完整編輯</button>`;
     return`<tr>
       <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span></td>
       <td style="font-size:11px">${r.dept||''}<br>${r.sid||''}</td>
@@ -954,6 +1022,7 @@ function renderRecords(){
       <td>
         <div style="display:flex;flex-direction:column;gap:4px">
           ${actionBtns}
+          ${editRecBtn}
           <button class="btn btn-sm btn-danger" onclick="deleteRecord('${r.id}')">刪除</button>
         </div>
       </td>
@@ -1003,7 +1072,7 @@ function renderRecEqAdd(){
   document.getElementById('rec-eq-add-list').innerHTML=items.map(e=>{
     const avail=getAvail(e.id,r.start,r.end,r.id);
     const hasCards=(e.cardNumbers||[]).length>0;
-    const busyCards=getBusyCards(e.id,r.id);
+    const busyCards=getBusyCards(e.id,r.start,r.end,r.id);
     const availCards=(e.cardNumbers||[]).filter(c=>!busyCards.has(c));
     return`<div class="eq-item">
       <div>
@@ -1120,13 +1189,21 @@ function renderMembers(){
   if(!members.length){tbody.innerHTML='';return;}
   tbody.innerHTML=members.map(m=>{
     const tc=m.taskCount||0,r=Math.floor(tc/3),prog=tc%3;
+    const officerBadge=m.isOfficer
+      ?`<span class="badge-officer">幹部</span>`
+      :`<span class="badge-normal">一般</span>`;
+    const officerBtn=m.isOfficer
+      ?`<button class="btn btn-sm btn-warn" onclick="setOfficer('${m.id}',false)">取消幹部</button>`
+      :`<button class="btn btn-sm btn-purple" onclick="setOfficer('${m.id}',true)">設為幹部</button>`;
     return`<tr>
       <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
+      <td>${officerBadge}</td>
       <td>${tc} 場</td>
       <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
       <td><span class="token-bar">${[0,1,2].map(i=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> ${prog}/3</td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${officerBtn}
           <button class="btn btn-sm" onclick="addTask('${m.id}')">+任務</button>
           <button class="btn btn-sm btn-danger" onclick="removeTask('${m.id}')">−任務</button>
           ${r>0?`<button class="btn btn-sm btn-purple" onclick="redeemTask('${m.id}')">兌換</button>`:''}
@@ -1142,6 +1219,8 @@ function openAddMember(){
   document.getElementById('modal-member-title').textContent='新增社員';
   document.getElementById('m-id').value='';
   ['m-name','m-dept','m-sid','m-phone','m-email'].forEach(id=>document.getElementById(id).value='');
+  const isOfficerEl=document.getElementById('m-isOfficer');
+  if(isOfficerEl) isOfficerEl.checked=false;
   document.getElementById('err-m-name').style.display='none';openModal('modal-member');
 }
 function openEditMember(id){
@@ -1149,13 +1228,17 @@ function openEditMember(id){
   document.getElementById('modal-member-title').textContent='編輯社員';
   document.getElementById('m-id').value=id;
   ['name','dept','sid','phone','email'].forEach(k=>{const el=document.getElementById('m-'+k);if(el)el.value=m[k]||'';});
+  const isOfficerEl=document.getElementById('m-isOfficer');
+  if(isOfficerEl) isOfficerEl.checked=!!(m.isOfficer);
   document.getElementById('err-m-name').style.display='none';openModal('modal-member');
 }
 async function saveMember(){
   const name=document.getElementById('m-name').value.trim();
   if(!name){document.getElementById('err-m-name').style.display='block';return;}
   const id=document.getElementById('m-id').value;
-  const data={name,dept:document.getElementById('m-dept').value.trim(),sid:document.getElementById('m-sid').value.trim(),phone:document.getElementById('m-phone').value.trim(),email:document.getElementById('m-email').value.trim()};
+  const isOfficerEl=document.getElementById('m-isOfficer');
+  const isOfficer=isOfficerEl?isOfficerEl.checked:false;
+  const data={name,dept:document.getElementById('m-dept').value.trim(),sid:document.getElementById('m-sid').value.trim(),phone:document.getElementById('m-phone').value.trim(),email:document.getElementById('m-email').value.trim(),isOfficer};
   if(id){const m=members.find(x=>x.id===id);if(m)Object.assign(m,data);}
   else{if(members.find(m=>m.name===name)){alert('此姓名已存在');return;}members.push({id:'m'+Date.now(),...data,taskCount:0});}
   await apiPut('members',members);closeModal('modal-member');renderMembers();
@@ -1435,17 +1518,9 @@ function openCardAssign(recId, eqId){
   const allCards=(eqDef&&eqDef.cardNumbers)||[];
   const currentCards=eqItem.assignedCards||[];
 
-  // Which cards are busy in OTHER records (not this one)
-  const busyElsewhere=new Set();
-  records.forEach(rec=>{
-    if(rec.id===recId)return;
-    const st=computeStatus(rec);
-    if(st==='done'||st==='pending')return;
-    const item=(rec.equipment||[]).find(x=>x.id===eqId);
-    if(!item)return;
-    if((rec.returnedItems||[]).includes(item.id+'__'+item.qty))return;
-    (item.assignedCards||[]).forEach(c=>busyElsewhere.add(c));
-  });
+  // Which cards are busy in OTHER records with time overlap
+  const r0=records.find(x=>x.id===recId);
+  const busyElsewhere=getBusyCards(eqId,r0?r0.start:null,r0?r0.end:null,recId);
 
   document.getElementById('ca-rec-id').value=recId;
   document.getElementById('ca-eq-id').value=eqId;
@@ -1703,6 +1778,250 @@ async function doLegacyImport(){
     if(btn)btn.disabled = false;
   }
 }
+
+
+// ═══ SESSION: /api/admin/check + /api/admin/logout ═══
+async function tryRestoreSession(){
+  try{
+    const d=await api('/api/admin/check');
+    if(d.ok){
+      document.getElementById('login-overlay').style.display='none';
+      await loadAdminState();
+    }
+  }catch{}
+}
+
+async function adminLogout(){
+  if(!confirm('確定要登出嗎？'))return;
+  try{await api('/api/admin/logout',{method:'POST'});}catch{}
+  // Clear cookie by navigating – server already cleared session
+  location.reload();
+}
+
+// ═══ OFFICER / 幹部 ═══
+async function setOfficer(id, isOfficer){
+  const m=members.find(x=>x.id===id);
+  if(!m)return;
+  const label=isOfficer?'設為幹部':'取消幹部身分';
+  if(!confirm(`確定要${label}：${m.name}？`))return;
+  m.isOfficer=isOfficer;
+  await apiPut('members',members);
+  renderMembers();
+}
+
+// ── saveMember: read isOfficer checkbox ──
+// (Replaces existing saveMember – safe because it's the same name)
+
+// ═══ FULL EDIT RECORD ═══
+function fmtDTLfromISO(s){
+  if(!s)return'';
+  try{
+    const d=new Date(s);
+    return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  }catch{return'';}
+}
+
+function openEditRecord(id){
+  const r=records.find(x=>x.id===id);
+  if(!r)return;
+  document.getElementById('er-id').value=id;
+  document.getElementById('er-name').value=r.name||'';
+  document.getElementById('er-dept').value=r.dept||'';
+  document.getElementById('er-sid').value=r.sid||'';
+  document.getElementById('er-phone').value=r.phone||'';
+  document.getElementById('er-email').value=r.email||'';
+  document.getElementById('er-cat').value=r.cat||'personal';
+  document.getElementById('er-taskname').value=r.taskName||'';
+  document.getElementById('er-taskname-wrap').style.display=r.cat==='task'?'block':'none';
+  document.getElementById('er-cat').onchange=function(){
+    document.getElementById('er-taskname-wrap').style.display=this.value==='task'?'block':'none';
+  };
+  document.getElementById('er-start').value=fmtDTLfromISO(r.start);
+  document.getElementById('er-end').value=fmtDTLfromISO(r.end);
+  document.getElementById('er-note').value=r.note||'';
+  document.getElementById('er-err').style.display='none';
+
+  // Build equipment rows
+  erRenderEqList(r);
+  openModal('modal-edit-record');
+}
+
+function erRenderEqList(r){
+  const returned=r.returnedItems||[];
+  const el=document.getElementById('er-eq-list');
+  el.innerHTML=(r.equipment||[]).map((e,idx)=>{
+    const key=e.id+'__'+e.qty;
+    const isRet=returned.includes(key);
+    const eqDef=equipment.find(x=>x.id===e.id);
+    const hasCards=eqDef&&(eqDef.cardNumbers||[]).length>0;
+    const cards=(e.assignedCards||[]).filter(Boolean);
+
+    const cardSelects=hasCards?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">
+      ${Array.from({length:e.qty},(_,i)=>{
+        const cur=cards[i]||'';
+        const busySet=getBusyCardsForEdit(e.id,r.id);
+        return`<select data-eq-idx="${idx}" data-card-idx="${i}" style="font-size:11px;padding:2px 4px;border:1px solid #d1d5db;border-radius:5px;max-width:110px" onchange="erCardChange(this)">
+          <option value="">卡號</option>
+          ${(eqDef.cardNumbers||[]).map(c=>`<option value="${c}" ${c===cur?'selected':''} ${busySet.has(c)&&c!==cur?'disabled':''}>${c}${busySet.has(c)&&c!==cur?' ✗':''}</option>`).join('')}
+        </select>`;
+      }).join('')}
+    </div>`:'';
+
+    return`<div class="er-eq-row" data-idx="${idx}" style="background:#f9fafb;border-radius:7px;padding:8px 10px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="checkbox" id="er-ret-${idx}" ${isRet?'checked':''} style="width:auto" onchange="erRetChange(${idx})">
+        <label for="er-ret-${idx}" style="margin:0;font-size:12px;color:#374151;font-weight:500;${isRet?'text-decoration:line-through;color:#9ca3af':''}">已還</label>
+        <span style="font-size:13px;flex:1">${e.name}</span>
+        <span style="font-size:12px;color:#6b7280">× </span>
+        <input type="number" data-eq-idx="${idx}" class="er-qty-input" value="${e.qty}" min="1" max="99" style="width:52px;padding:3px 6px;font-size:12px;border:1px solid #d1d5db;border-radius:5px" onchange="erQtyChange(this)">
+        <button class="btn btn-sm btn-danger" onclick="erRemoveEq(${idx})" style="font-size:11px">移除</button>
+      </div>
+      ${cardSelects}
+    </div>`;
+  }).join('');
+}
+
+// Get busy cards for this eqId excluding current record, using record's time window
+function getBusyCardsForEdit(eqId, excludeRecId){
+  const r0=records.find(x=>x.id===excludeRecId);
+  const start=document.getElementById('er-start').value||null;
+  const end=document.getElementById('er-end').value||null;
+  // Use edited start/end if available, fallback to record's stored times
+  const s=start||( r0?r0.start:null);
+  const e=end||(r0?r0.end:null);
+  return getBusyCards(eqId,s,e,excludeRecId);
+}
+
+function erRetChange(idx){
+  const row=document.querySelector(`.er-eq-row[data-idx="${idx}"]`);
+  const checked=document.getElementById('er-ret-'+idx).checked;
+  const label=row.querySelector('label');
+  if(label) label.style.cssText=checked?'margin:0;font-size:12px;color:#9ca3af;text-decoration:line-through;font-weight:500':'margin:0;font-size:12px;color:#374151;font-weight:500';
+}
+
+function erQtyChange(input){
+  // nothing needed at render time; value read on save
+}
+
+function erCardChange(sel){
+  // nothing needed at render time; value read on save
+}
+
+function erRemoveEq(idx){
+  const r=records.find(x=>x.id===document.getElementById('er-id').value);
+  if(!r)return;
+  r._erWorkingEq=(r._erWorkingEq||[...r.equipment]);
+  r._erWorkingEq.splice(idx,1);
+  erRenderEqListFromWorking(r);
+}
+
+function erRenderEqListFromWorking(r){
+  // rebuild from _erWorkingEq if it exists
+  const wEq=r._erWorkingEq||r.equipment;
+  const tmp={...r,equipment:wEq};
+  erRenderEqList(tmp);
+}
+
+function erAddEqRow(){
+  const recId=document.getElementById('er-id').value;
+  const r=records.find(x=>x.id===recId);
+  if(!r)return;
+  // Show a small inline search
+  const existIds=new Set((r._erWorkingEq||r.equipment||[]).map(e=>e.id));
+  const search=prompt('輸入器材名稱關鍵字搜尋：');
+  if(!search)return;
+  const matches=equipment.filter(e=>e.name.toLowerCase().includes(search.toLowerCase())&&!existIds.has(e.id));
+  if(!matches.length){alert('找不到符合的器材（或已在清單中）');return;}
+  const choice=matches.length===1?matches[0]:matches[prompt(
+    matches.map((e,i)=>`${i+1}. ${e.name}`).join('\n')+'\n\n請輸入數字選擇（取消輸入空白）:'
+  )-1];
+  if(!choice)return;
+  if(!r._erWorkingEq) r._erWorkingEq=[...r.equipment];
+  r._erWorkingEq.push({id:choice.id,qty:1,name:choice.name,assignedCards:[]});
+  erRenderEqListFromWorking(r);
+}
+
+async function saveEditRecord(){
+  const recId=document.getElementById('er-id').value;
+  const r=records.find(x=>x.id===recId);
+  if(!r)return;
+
+  const name=document.getElementById('er-name').value.trim();
+  const dept=document.getElementById('er-dept').value.trim();
+  const sid=document.getElementById('er-sid').value.trim();
+  const phone=document.getElementById('er-phone').value.trim();
+  const email=document.getElementById('er-email').value.trim();
+  const cat=document.getElementById('er-cat').value;
+  const taskName=document.getElementById('er-taskname').value.trim();
+  const start=document.getElementById('er-start').value;
+  const end=document.getElementById('er-end').value;
+  const note=document.getElementById('er-note').value.trim();
+
+  const errEl=document.getElementById('er-err');
+  errEl.style.display='none';
+
+  if(!name||!dept||!sid||!phone||!email){errEl.textContent='借用人資料不完整';errEl.style.display='block';return;}
+  if(!cat){errEl.textContent='請選擇借用類別';errEl.style.display='block';return;}
+  if(cat==='task'&&!taskName){errEl.textContent='社內任務必須填寫任務名稱';errEl.style.display='block';return;}
+  if(!start||!end||new Date(end)<=new Date(start)){errEl.textContent='借用時間不正確';errEl.style.display='block';return;}
+
+  // Collect equipment from rendered rows
+  const rows=document.querySelectorAll('.er-eq-row');
+  if(!rows.length){errEl.textContent='至少需要一項器材';errEl.style.display='block';return;}
+
+  const eqList=[];
+  const retItems=[];
+  for(const row of rows){
+    const idx=parseInt(row.dataset.idx);
+    const wEq=r._erWorkingEq||r.equipment;
+    const eqItem=wEq[idx];
+    if(!eqItem)continue;
+    const qtyEl=row.querySelector('.er-qty-input');
+    const qty=parseInt(qtyEl?qtyEl.value:eqItem.qty)||1;
+    const retEl=document.getElementById('er-ret-'+idx);
+    const isRet=retEl?retEl.checked:false;
+    // Collect assigned cards
+    const cardSels=row.querySelectorAll('select[data-card-idx]');
+    const assignedCards=[...cardSels].map(s=>s.value).filter(Boolean);
+    eqList.push({id:eqItem.id,qty,name:eqItem.name,assignedCards});
+    if(isRet) retItems.push(eqItem.id+'__'+qty);
+  }
+
+  const btn=document.getElementById('er-save-btn');
+  if(btn)btn.disabled=true;
+  try{
+    const d=await api(`/api/admin/records/${recId}`,{
+      method:'PUT',
+      body:JSON.stringify({name,dept,sid,phone,email,cat,taskName,start,end,note,equipment:eqList,returnedItems:retItems})
+    });
+    // Sync local record
+    const idx=records.findIndex(x=>x.id===recId);
+    if(idx>=0) records[idx]=d.record;
+    // Clean working copy
+    if(r._erWorkingEq) delete r._erWorkingEq;
+    closeModal('modal-edit-record');
+    renderRecords();
+    renderEqList();
+  }catch(e){
+    errEl.textContent='儲存失敗：'+e.message;
+    errEl.style.display='block';
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+
+// ═══ Override saveMember to include isOfficer ═══
+// (The original saveMember is defined earlier; this replaces it via closure shadowing
+//  because JS uses last-defined function in the same scope only with var, not const/function.
+//  We instead patch the saveMember reference below.)
+
+// Re-render eq list when borrower name/sid/phone changes (officer status check)
+['b-name','b-sid','b-phone'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',()=>{
+    if(document.getElementById('b-cat').value) renderEqList();
+  });
+});
 
 // Bootstrap
 tryRestoreSession();
