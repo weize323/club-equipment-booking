@@ -121,7 +121,7 @@ const DEFAULT_EQ = [
   {id:'e105',name:'RCA-3.5（15m）',type:'配件',qty:1,allow:['event','task'],eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[]}
 ];
 
-const DEFAULT_PH = {name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東'};
+const DEFAULT_PH = {name:'輸入姓名',dept:'例：企管二乙',sid:'例：D1234567',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼咚咚'};
 const DEFAULT_EMAIL = {serviceId:'',templateId:'',pubKey:'',subject:'【器材借用】您的申請已通過審核',body:'親愛的 {{to_name}} 同學您好，\n\n您的借用申請已通過審核！\n\n器材：{{borrow_items}}\n借出：{{borrow_start}}\n歸還：{{borrow_end}}\n\n如有問題請洽管理員。'};
 const DEFAULT_LOCATIONS = ['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER = ['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
@@ -296,6 +296,16 @@ const server=http.createServer(async(req,res)=>{
       return fs.createReadStream(path.join(ROOT,'admin.html')).pipe(res);
     if(m==='GET'&&p==='/api/health')
       return json(res,200,{ok:true,records:db.records.length,members:db.members.length,equipment:db.equipment.length});
+
+    // ── Public placeholders (no auth required, only returns placeholder text) ──
+    if(m==='GET'&&p==='/api/public-placeholders'){
+      const def={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東'};
+      const ph=db.placeholders||{};
+      return json(res,200,{
+        name:ph.name||def.name,dept:ph.dept||def.dept,sid:ph.sid||def.sid,
+        phone:ph.phone||def.phone,email:ph.email||def.email,taskName:ph.taskName||def.taskName
+      });
+    }
 
     // ── Public state (members includes isOfficer flag for index.html) ──
     if(m==='GET'&&p==='/api/public-state'){
