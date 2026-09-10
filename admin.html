@@ -1151,8 +1151,11 @@ function renderRecords(){
 
 async function deleteRecord(id){
   if(!confirm('確定刪除？'))return;
-  records=records.filter(x=>x.id!==id);
-  await apiPut('records',records);renderRecords();
+  try{
+    await api(`/api/admin/records/${id}`,{method:'DELETE'});
+    records=records.filter(x=>x.id!==id);
+    renderRecords();
+  }catch(e){alert('刪除失敗：'+e.message);}
 }
 
 // ═══ EDIT RECORD EQUIPMENT ═══
@@ -1177,11 +1180,14 @@ function renderRecEqCurrent(){
 }
 async function removeRecEq(eqId){
   const r=records.find(x=>x.id===editRecId);if(!r)return;
-  r.equipment=(r.equipment||[]).filter(e=>e.id!==eqId);
-  r.returnedItems=(r.returnedItems||[]).filter(k=>!k.startsWith(eqId+'__'));
-  await apiPut('records',records);
-  renderRecEqCurrent();renderRecEqAdd();
-  if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+  const newEquipment=(r.equipment||[]).filter(e=>e.id!==eqId);
+  try{
+    const d=await api(`/api/admin/records/${editRecId}/equipment`,{method:'PATCH',body:JSON.stringify({equipment:newEquipment})});
+    const idx=records.findIndex(x=>x.id===editRecId);
+    if(idx>=0)records[idx]=d.record;
+    renderRecEqCurrent();renderRecEqAdd();
+    if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+  }catch(e){alert('移除失敗：'+e.message);}
 }
 function renderRecEqAdd(){
   const r=records.find(x=>x.id===editRecId);if(!r)return;
@@ -1217,12 +1223,16 @@ async function addRecEq(eqId){
   const e=equipment.find(x=>x.id===eqId);if(!e)return;
   const cardEl=document.getElementById('add-card-'+eqId);
   const assignedCards=cardEl&&cardEl.value?[cardEl.value]:[];
-  r.equipment=(r.equipment||[]);
-  const exist=r.equipment.find(x=>x.id===eqId);
-  if(exist)exist.qty+=qty;else r.equipment.push({id:eqId,qty,name:e.name,assignedCards});
-  await apiPut('records',records);
-  renderRecEqCurrent();renderRecEqAdd();
-  if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+  const newEquipment=(r.equipment||[]).map(x=>({...x}));
+  const exist=newEquipment.find(x=>x.id===eqId);
+  if(exist)exist.qty+=qty;else newEquipment.push({id:eqId,qty,name:e.name,assignedCards});
+  try{
+    const d=await api(`/api/admin/records/${editRecId}/equipment`,{method:'PATCH',body:JSON.stringify({equipment:newEquipment})});
+    const idx=records.findIndex(x=>x.id===editRecId);
+    if(idx>=0)records[idx]=d.record;
+    renderRecEqCurrent();renderRecEqAdd();
+    if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+  }catch(e){alert('新增失敗：'+e.message);}
 }
 
 // ═══ APPROVE ═══
@@ -1249,18 +1259,29 @@ function openApprove(id){
 }
 async function approveBorrow(){
   const r=records.find(x=>x.id===approveTargetId);if(!r)return;
-  r.status='approved';
-  if(r.cat==='task'){let m=members.find(x=>x.sid===r.sid||x.name===r.name);if(m)m.taskCount=(m.taskCount||0)+1;await apiPut('members',members);}
-  await apiPut('records',records);
-  closeModal('modal-approve');renderRecords();
-  const approveTid=emailSettings.approveTemplateId||emailSettings.templateId;
-  if(r.email&&emailSettings.serviceId&&approveTid&&emailSettings.pubKey)sendApprovalEmail(r);
-  else alert('審核通過！（Email 尚未設定）');
+  try{
+    const d=await api(`/api/admin/records/${approveTargetId}/approve`,{method:'POST'});
+    const idx=records.findIndex(x=>x.id===approveTargetId);
+    if(idx>=0)records[idx]=d.record;
+    // Server already applied the task-count bump authoritatively; mirror it locally
+    // for this browser's own immediate display only (not sent back anywhere).
+    if(r.cat==='task'){
+      const mem=members.find(x=>x.sid===r.sid||x.name===r.name);
+      if(mem)mem.taskCount=(mem.taskCount||0)+1;
+    }
+    closeModal('modal-approve');renderRecords();
+    const approveTid=emailSettings.approveTemplateId||emailSettings.templateId;
+    if(r.email&&emailSettings.serviceId&&approveTid&&emailSettings.pubKey)sendApprovalEmail(r);
+    else alert('審核通過！（Email 尚未設定）');
+  }catch(e){alert('審核失敗：'+e.message);}
 }
 async function rejectBorrow(){
   if(!confirm('確定駁回？'))return;
-  records=records.filter(x=>x.id!==approveTargetId);
-  await apiPut('records',records);closeModal('modal-approve');renderRecords();
+  try{
+    await api(`/api/admin/records/${approveTargetId}/reject`,{method:'POST'});
+    records=records.filter(x=>x.id!==approveTargetId);
+    closeModal('modal-approve');renderRecords();
+  }catch(e){alert('駁回失敗：'+e.message);}
 }
 function sendApprovalEmail(r){
   emailjs.init(emailSettings.pubKey);
@@ -1293,17 +1314,21 @@ function openReturn(id){
 }
 async function confirmReturn(all){
   const r=records.find(x=>x.id===returnTargetId);if(!r)return;
+  const note=document.getElementById('return-note').value.trim();
+  let body;
   if(all){
-    r.status='done';r.returnedItems=(r.equipment||[]).map(e=>e.id+'__'+e.qty);r.returnedAt=new Date().toISOString();
+    body={all:true,note};
   }else{
     const checked=(r.equipment||[]).filter(e=>document.getElementById('ret-'+e.id)?.checked&&!(r.returnedItems||[]).includes(e.id+'__'+e.qty));
     if(!checked.length){alert('請勾選尚未歸還的器材');return;}
-    const newRet=[...(r.returnedItems||[]),...checked.map(e=>e.id+'__'+e.qty)];
-    r.returnedItems=newRet;
-    if((r.equipment||[]).every(e=>newRet.includes(e.id+'__'+e.qty))){r.status='done';r.returnedAt=new Date().toISOString();}
+    body={all:false,returnedKeys:checked.map(e=>e.id+'__'+e.qty),note};
   }
-  r.returnNote=document.getElementById('return-note').value.trim();
-  await apiPut('records',records);closeModal('modal-return');renderRecords();
+  try{
+    const d=await api(`/api/admin/records/${returnTargetId}/return`,{method:'POST',body:JSON.stringify(body)});
+    const idx=records.findIndex(x=>x.id===returnTargetId);
+    if(idx>=0)records[idx]=d.record;
+    closeModal('modal-return');renderRecords();
+  }catch(e){alert('登記歸還失敗：'+e.message);}
 }
 
 // ═══ MEMBERS ═══
@@ -1382,27 +1407,64 @@ function openEditMember(id){
 async function saveMember(){
   const name=document.getElementById('m-name').value.trim();
   if(!name){document.getElementById('err-m-name').style.display='block';return;}
+  document.getElementById('err-m-name').style.display='none';
   const id=document.getElementById('m-id').value;
   const isOfficerEl=document.getElementById('m-isOfficer');
   const isOfficer=isOfficerEl?isOfficerEl.checked:false;
   const data={name,dept:document.getElementById('m-dept').value.trim(),sid:document.getElementById('m-sid').value.trim(),phone:document.getElementById('m-phone').value.trim(),email:document.getElementById('m-email').value.trim(),isOfficer};
-  if(id){const m=members.find(x=>x.id===id);if(m)Object.assign(m,data);}
-  else{if(members.find(m=>m.name===name)){alert('此姓名已存在');return;}members.push({id:'m'+Date.now(),...data,taskCount:0});}
-  await apiPut('members',members);closeModal('modal-member');renderMembers();
+  try{
+    if(id){
+      const d=await api(`/api/admin/members/${id}`,{method:'PUT',body:JSON.stringify(data)});
+      const idx=members.findIndex(x=>x.id===id);
+      if(idx>=0)members[idx]=d.member;
+    }else{
+      const d=await api('/api/admin/members',{method:'POST',body:JSON.stringify(data)});
+      members.push(d.member);
+    }
+    closeModal('modal-member');renderMembers();
+  }catch(e){
+    document.getElementById('err-m-name').textContent=e.message;
+    document.getElementById('err-m-name').style.display='block';
+  }
 }
-async function addTask(id){const m=members.find(x=>x.id===id);if(m){m.taskCount=(m.taskCount||0)+1;await apiPut('members',members);renderMembers();}}
+async function addTask(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  try{
+    const d=await api(`/api/admin/members/${id}/task-count`,{method:'POST',body:JSON.stringify({delta:1})});
+    const idx=members.findIndex(x=>x.id===id);
+    if(idx>=0)members[idx]=d.member;
+    renderMembers();
+  }catch(e){alert('操作失敗：'+e.message);}
+}
 async function removeTask(id){
   const m=members.find(x=>x.id===id);if(!m)return;
   if((m.taskCount||0)<=0){alert('已為 0');return;}
   if(!confirm(`確定扣除 ${m.name} 1 場任務？`))return;
-  m.taskCount=Math.max(0,(m.taskCount||0)-1);await apiPut('members',members);renderMembers();
+  try{
+    const d=await api(`/api/admin/members/${id}/task-count`,{method:'POST',body:JSON.stringify({delta:-1})});
+    const idx=members.findIndex(x=>x.id===id);
+    if(idx>=0)members[idx]=d.member;
+    renderMembers();
+  }catch(e){alert('操作失敗：'+e.message);}
 }
 async function redeemTask(id){
   const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<3)return;
   if(!confirm(`幫 ${m.name} 兌換 1 次個人借用？（扣 3 場）`))return;
-  m.taskCount-=3;await apiPut('members',members);renderMembers();alert(`兌換成功！剩餘 ${m.taskCount} 場`);
+  try{
+    const d=await api(`/api/admin/members/${id}/redeem`,{method:'POST'});
+    const idx=members.findIndex(x=>x.id===id);
+    if(idx>=0)members[idx]=d.member;
+    renderMembers();alert(`兌換成功！剩餘 ${d.member.taskCount} 場`);
+  }catch(e){alert('兌換失敗：'+e.message);}
 }
-async function delMember(id){if(!confirm('確定刪除？'))return;members=members.filter(x=>x.id!==id);await apiPut('members',members);renderMembers();}
+async function delMember(id){
+  if(!confirm('確定刪除？'))return;
+  try{
+    await api(`/api/admin/members/${id}`,{method:'DELETE'});
+    members=members.filter(x=>x.id!==id);
+    renderMembers();
+  }catch(e){alert('刪除失敗：'+e.message);}
+}
 function viewMemberDetail(id){
   const m=members.find(x=>x.id===id);
   const recs=records.filter(r=>r.name===m.name||(m.sid&&r.sid===m.sid));
@@ -2188,9 +2250,12 @@ async function setOfficer(id, isOfficer){
   if(!m)return;
   const label=isOfficer?'設為幹部':'取消幹部身分';
   if(!confirm(`確定要${label}：${m.name}？`))return;
-  m.isOfficer=isOfficer;
-  await apiPut('members',members);
-  renderMembers();
+  try{
+    const d=await api(`/api/admin/members/${id}/officer`,{method:'POST',body:JSON.stringify({isOfficer})});
+    const idx=members.findIndex(x=>x.id===id);
+    if(idx>=0)members[idx]=d.member;
+    renderMembers();
+  }catch(e){alert('操作失敗：'+e.message);}
 }
 
 // ── saveMember: read isOfficer checkbox ──
