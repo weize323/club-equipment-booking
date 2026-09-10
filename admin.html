@@ -1034,8 +1034,9 @@ function onNameInput(val){
   const m=members.find(x=>x.name===val.trim());
   if(!m){hint.style.display='none';return;}
   const r=Math.floor((m.taskCount||0)/3);
+  const roleLabel=m.isOfficer?'幹部':'社員';
   hint.style.display='block';
-  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">社員 · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${((m.taskCount||0)%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
+  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${((m.taskCount||0)%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
 }
 
 // ═══ SUBMIT BORROW ═══
