@@ -1013,8 +1013,8 @@ const server=http.createServer(async(req,res)=>{
       const name=String(b.name||'').trim(),sid=String(b.sid||'').trim(),phone=String(b.phone||'').trim();
       const member=db.members.find(x=>x.name===name&&x.sid===sid&&x.phone===phone);
       const recs=db.records.filter(r=>r.name===name&&r.sid===sid&&r.phone===phone);
-      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false});
-      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer)});
+      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false,taskCount:0});
+      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer),taskCount:(member&&member.taskCount)||0});
     }
 
     // ── Admin import legacy ──
