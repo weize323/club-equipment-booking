@@ -54,6 +54,10 @@ input:focus,select:focus{border-color:#3b82f6}
 .eq-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
 .dot-available{background:#10b981}.dot-inuse{background:#f59e0b}
 .dot-repairing{background:#ef4444}.dot-lost,.dot-disabled{background:#d1d5db}
+.hint-box{background:#e0f2fe;border-radius:6px;padding:6px 9px;font-size:12px;color:#0369a1;margin-top:5px}
+.token-bar{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin-left:4px}
+.token{width:12px;height:12px;border-radius:50%;border:2px solid #d1d5db;background:#fff;display:inline-block}
+.token.filled{background:#f59e0b;border-color:#f59e0b}
 </style>
 </head>
 <body>
@@ -75,6 +79,7 @@ input:focus,select:focus{border-color:#3b82f6}
         <div><label>姓名 *</label><input type="text" id="ub-name" placeholder="輸入姓名"></div>
         <div><label>系級 *</label><input type="text" id="ub-dept" placeholder="例：行銷三乙"></div>
       </div>
+      <div id="ub-member-hint" style="display:none"><div id="ub-member-info-box"></div></div>
       <div class="grid-2">
         <div><label>學號 *</label><input type="text" id="ub-sid" placeholder="例：D1345026"></div>
         <div><label>電話 *</label><input type="tel" id="ub-phone" placeholder="0912345678"></div>
@@ -631,11 +636,38 @@ async function submitUBorrow(){
   finally{if(btn)btn.disabled=false;}
 }
 
+// Identity hint strip (社員/幹部 · 任務場次 · 可兌換次數) — looks up the exact
+// name+sid+phone via the existing /api/member/verify endpoint (no new API added).
+// Hidden whenever the three fields aren't all filled yet, or when no match is found.
+let _memberHintTimer=null;
+function refreshMemberHint(){
+  clearTimeout(_memberHintTimer);
+  _memberHintTimer=setTimeout(async()=>{
+    const hint=document.getElementById('ub-member-hint');
+    const name=(document.getElementById('ub-name').value||'').trim();
+    const sid=(document.getElementById('ub-sid').value||'').trim();
+    const phone=(document.getElementById('ub-phone').value||'').trim();
+    if(!name||!sid||!phone){hint.style.display='none';return;}
+    try{
+      const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
+      if(!d.ok){hint.style.display='none';return;}
+      const tc=d.taskCount||0;
+      const r=Math.floor(tc/3);
+      const roleLabel=d.isOfficer?'幹部':'社員';
+      hint.style.display='block';
+      document.getElementById('ub-member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${tc}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${(tc%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
+    }catch{
+      hint.style.display='none';
+    }
+  },300);
+}
+
 // Re-check officer status (server-side, per-person) when user changes name/sid/phone
 ['ub-name','ub-sid','ub-phone'].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener('input',()=>{
     if(document.getElementById('ub-cat').value){renderUEqList();refreshOfficerStatus();}
+    refreshMemberHint();
   });
 });
 
