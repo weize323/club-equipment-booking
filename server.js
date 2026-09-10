@@ -149,6 +149,13 @@ const DEFAULT_EMAIL={serviceId:'',templateId:'',pubKey:'',adminEmail:'',subject:
 const DEFAULT_LOCATIONS=['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER=['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
 
+// Fresh-install gate: creating a brand-new empty database is ONLY allowed when this
+// is explicitly set. In a normal Railway deploy this stays unset/false, so a missing
+// or unreadable data.json can NEVER be silently treated as "first run" — it fails
+// closed instead, protecting existing production data from ever being replaced by
+// initialDB() by accident (a bad Volume mount, a permissions glitch, disk hiccup, etc).
+const ALLOW_INITIAL_DB = process.env.ALLOW_INITIAL_DB === 'true';
+
 function initialDB(){
   return {version:4,password:makePw(process.env.ADMIN_PASSWORD||'admin123'),
     records:[],members:[],equipment:DEFAULT_EQ,
@@ -157,43 +164,104 @@ function initialDB(){
     resetTokens:{}};
 }
 
+function failClosed(reason, detail){
+  console.error('='.repeat(64));
+  console.error('FATAL: data.json missing / data persistence error');
+  console.error(`Reason: ${reason}`);
+  if(detail) console.error(String(detail));
+  console.error(`Expected file: ${DB_FILE}`);
+  console.error('Refusing to start with an empty or corrupted database — this');
+  console.error('protects existing production data from being silently reset.');
+  console.error('If this is genuinely a brand-new environment with no prior data,');
+  console.error('set ALLOW_INITIAL_DB=true and restart to create a fresh database.');
+  console.error('If data.json is corrupted, a backup may exist at data.json.bak —');
+  console.error('inspect and restore it manually before restarting.');
+  console.error('='.repeat(64));
+  process.exit(1);
+}
+
 function readDB(){
-  if(!fs.existsSync(DB_FILE)){const d=initialDB();writeDB(d);return d;}
+  if(!fs.existsSync(DB_FILE)){
+    if(!ALLOW_INITIAL_DB) return failClosed('data.json does not exist and ALLOW_INITIAL_DB is not set to true');
+    console.log(`[readDB] No existing data.json found. ALLOW_INITIAL_DB=true — creating a fresh database at ${DB_FILE}`);
+    const d=initialDB();
+    writeDB(d);
+    return d;
+  }
+
+  let raw;
   try{
-    const d=JSON.parse(fs.readFileSync(DB_FILE,'utf8'));
-    // Non-destructive migrations
+    raw=fs.readFileSync(DB_FILE,'utf8');
+  }catch(e){
+    return failClosed('failed to read data.json (permissions or I/O error)', e);
+  }
+
+  let d;
+  try{
+    d=JSON.parse(raw);
+  }catch(e){
+    return failClosed('failed to parse data.json as JSON (file may be corrupted or truncated)', e);
+  }
+
+  try{
+    // Non-destructive migrations: ONLY fill in fields that are genuinely absent
+    // (undefined). Never treat an admin's intentionally-set falsy value (0, '',
+    // false, an emptied array/object) as "missing" and overwrite it with a default —
+    // that would silently discard real configuration the admin already saved.
     if(!d.locations) d.locations=DEFAULT_LOCATIONS;
     if(!d.catOrder)  d.catOrder=DEFAULT_CAT_ORDER;
     if(!d.placeholders) d.placeholders=DEFAULT_PH;
-    if(!d.placeholders.taskName) d.placeholders.taskName=DEFAULT_PH.taskName;
+    if(d.placeholders.taskName===undefined) d.placeholders.taskName=DEFAULT_PH.taskName;
     if(!d.emailSettings) d.emailSettings=DEFAULT_EMAIL;
-    if(!d.emailSettings.adminEmail) d.emailSettings.adminEmail='';
-    if(!d.emailSettings.notifySubject) d.emailSettings.notifySubject=DEFAULT_EMAIL.notifySubject;
-    if(!d.emailSettings.notifyBody) d.emailSettings.notifyBody=DEFAULT_EMAIL.notifyBody;
+    if(d.emailSettings.adminEmail===undefined) d.emailSettings.adminEmail='';
+    if(d.emailSettings.notifySubject===undefined) d.emailSettings.notifySubject=DEFAULT_EMAIL.notifySubject;
+    if(d.emailSettings.notifyBody===undefined) d.emailSettings.notifyBody=DEFAULT_EMAIL.notifyBody;
     if(d.emailSettings.notifyTemplateId===undefined) d.emailSettings.notifyTemplateId='';
     if(d.emailSettings.resetTemplateId===undefined) d.emailSettings.resetTemplateId='';
     if(d.emailSettings.approveTemplateId===undefined) d.emailSettings.approveTemplateId='';
     if(!d.resetTokens) d.resetTokens={};
-    // Migrate equipment: add usableQty, cards, keep cardNumbers for compatibility
+    // Migrate equipment: add usableQty, cards, keep cardNumbers for compatibility.
+    // migrateEquipment() itself only fills genuinely-missing sub-fields (see its own
+    // null/undefined check for usableQty — 0 is preserved as a valid, intentional value).
     if(d.equipment) d.equipment=d.equipment.map(migrateEquipment);
-    // Migrate members
+    // Migrate members: isOfficer defaults to false only when the field is absent —
+    // spread order (...m last) means an existing true/false value always wins.
     if(d.members) d.members=d.members.map(m=>({isOfficer:false,...m}));
-    // Migrate records
+    // Migrate records: same absent-field-only pattern.
     if(d.records) d.records=d.records.map(r=>({
       returnedItems:[],collabs:[],taskName:'',...r,
       equipment:(r.equipment||[]).map(e=>({assignedCards:[],...e}))
     }));
-    return d;
   }catch(e){
-    console.error('readDB error:',e);
-    return initialDB();
+    return failClosed('migration step threw an unexpected error while processing data.json', e);
   }
+
+  // Safe startup diagnostic — counts only, never PII (no names/phone/email/sid).
+  console.log(`[readDB] DATA_FILE=${DB_FILE}`);
+  console.log(`[readDB] records=${(d.records||[]).length} members=${(d.members||[]).length} equipment=${(d.equipment||[]).length}`);
+  return d;
 }
 
 function writeDB(d){
   const tmp=DB_FILE+'.tmp';
+  const bak=DB_FILE+'.bak';
+  // Back up the current file before it gets overwritten. If the backup itself
+  // fails, abort the write entirely rather than risk losing the only good copy —
+  // the existing data.json is left completely untouched in that case.
+  if(fs.existsSync(DB_FILE)){
+    try{
+      fs.copyFileSync(DB_FILE,bak);
+    }catch(e){
+      console.error('='.repeat(64));
+      console.error('ERROR: failed to create data.json.bak before writing — aborting this write.');
+      console.error('The existing data.json has NOT been modified.');
+      console.error(String(e));
+      console.error('='.repeat(64));
+      throw e;
+    }
+  }
   fs.writeFileSync(tmp,JSON.stringify(d,null,2),'utf8');
-  fs.renameSync(tmp,DB_FILE);
+  fs.renameSync(tmp,DB_FILE); // atomic — data.json is only ever replaced in one step
 }
 
 let db=readDB();
@@ -550,16 +618,13 @@ const server=http.createServer(async(req,res)=>{
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       const key=decodeURIComponent(p.split('/').pop());
       const b=await bodyJSON(req);
-      const allowed=['records','members','equipment','emailSettings','placeholders','locations','catOrder'];
+      // 'records' is intentionally NOT in this list. Every record mutation now goes
+      // through a dedicated single-id endpoint (PUT/PATCH/POST/DELETE .../records/:id...)
+      // which reads and writes exactly one record — never the whole array. This
+      // generic bulk endpoint can therefore no longer be used, accidentally or
+      // otherwise, to overwrite the entire records collection with a stale copy.
+      const allowed=['members','equipment','emailSettings','placeholders','locations','catOrder'];
       if(!allowed.includes(key))return json(res,400,{error:'不允許的欄位'});
-      // Guard: bulk-overwriting 'records' through this generic endpoint must still
-      // satisfy the same memory-card rules as the dedicated record-editing endpoints —
-      // this closes the bypass path where admin.html's simpler actions (delete/approve/
-      // reject/return/edit-equipment-list) push a modified records array here directly.
-      if(key==='records'){
-        const err=validateRecordsArray(b.value);
-        if(err)return json(res,400,{error:err});
-      }
       db[key]=b.value;writeDB(db);return json(res,200,{ok:true});
     }
 
@@ -676,12 +741,205 @@ const server=http.createServer(async(req,res)=>{
       if(!item)return json(res,404,{error:'器材不存在於此紀錄'});
       const eq=db.equipment.find(e=>e.id===b.eqId);
       if(eq&&(eq.cards||[]).length>0){
-        // Mandatory: must specify exactly item.qty valid, available, non-conflicting cards
+        // "不指定" is valid — whatever IS specified (0 to item.qty cards) is fully validated
         const errs=validateCards(eq,b.assignedCards||[],item.qty,rec.start,rec.end,recId);
         if(errs.length)return json(res,400,{error:errs.join('；')});
       }
       item.assignedCards=Array.isArray(b.assignedCards)?b.assignedCards.filter(Boolean):[];
-      writeDB(db);return json(res,200,{ok:true});
+      writeDB(db);return json(res,200,{ok:true,record:rec});
+    }
+
+    // ── Admin: approve a single record by id (server computes the task-count bump —
+    //    never trusts a client-supplied members array) ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/records\/[^/]+\/approve$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const rec=db.records.find(r=>r.id===recId);
+      if(!rec)return json(res,404,{error:'紀錄不存在'});
+      rec.status='approved';
+      if(rec.cat==='task'){
+        const mem=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
+        if(mem) mem.taskCount=(mem.taskCount||0)+1;
+      }
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
+    }
+
+    // ── Admin: reject (delete) a single pending record by id ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/records\/[^/]+\/reject$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const idx=db.records.findIndex(r=>r.id===recId);
+      if(idx===-1)return json(res,404,{error:'紀錄不存在'});
+      db.records.splice(idx,1);
+      writeDB(db);
+      return json(res,200,{ok:true,deletedId:recId});
+    }
+
+    // ── Admin: delete a single record by id (any status) ──
+    if(m==='DELETE'&&p.match(/^\/api\/admin\/records\/[^/]+$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const idx=db.records.findIndex(r=>r.id===recId);
+      if(idx===-1)return json(res,404,{error:'紀錄不存在'});
+      db.records.splice(idx,1);
+      writeDB(db);
+      return json(res,200,{ok:true,deletedId:recId});
+    }
+
+    // ── Admin: register full or partial return for a single record by id ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/records\/[^/]+\/return$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const rec=db.records.find(r=>r.id===recId);
+      if(!rec)return json(res,404,{error:'紀錄不存在'});
+      if(b.all){
+        rec.returnedItems=(rec.equipment||[]).map(e=>e.id+'__'+e.qty);
+        rec.status='done';
+        rec.returnedAt=new Date().toISOString();
+      }else{
+        const validKeys=new Set((rec.equipment||[]).map(e=>e.id+'__'+e.qty));
+        const addKeys=(Array.isArray(b.returnedKeys)?b.returnedKeys:[]).filter(k=>validKeys.has(k));
+        if(!addKeys.length)return json(res,400,{error:'請至少勾選一項尚未歸還的器材'});
+        rec.returnedItems=[...new Set([...(rec.returnedItems||[]),...addKeys])];
+        const allEq=rec.equipment||[];
+        if(allEq.length>0&&allEq.every(e=>rec.returnedItems.includes(e.id+'__'+e.qty))){
+          rec.status='done';
+          if(!rec.returnedAt) rec.returnedAt=new Date().toISOString();
+        }
+      }
+      if(b.note!==undefined) rec.returnNote=String(b.note||'').trim();
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
+    }
+
+    // ── Admin: replace the equipment list of a single record by id (used by the
+    //    "修改借用器材" add/remove-item modal). Re-validates qty/usableQty/cards the
+    //    same way the full-edit endpoint does, and rebuilds returnedItems to only
+    //    keep keys that still match the new equipment set. ──
+    if(m==='PATCH'&&p.match(/^\/api\/admin\/records\/[^/]+\/equipment$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const rec=db.records.find(r=>r.id===recId);
+      if(!rec)return json(res,404,{error:'紀錄不存在'});
+      if(!Array.isArray(b.equipment))return json(res,400,{error:'器材清單格式錯誤'});
+
+      for(const item of b.equipment){
+        const eq=db.equipment.find(e=>e.id===item.id);
+        if(!eq)return json(res,400,{error:`器材不存在：${item.id}`});
+        const qty=Number(item.qty);
+        if(!Number.isInteger(qty)||qty<1)return json(res,400,{error:`器材數量無效：${eq.name}`});
+        if(qty>eq.qty)return json(res,400,{error:`${eq.name} 數量 ${qty} 超過總數 ${eq.qty}`});
+        const usableQty=(eq.usableQty??eq.qty);
+        const occupied=getOccupied(eq.id,rec.start,rec.end,recId);
+        if(occupied+qty>usableQty)return json(res,400,{error:`${eq.name} 此時段可借上限 ${usableQty}，已借出 ${occupied}，本次需要 ${qty}`});
+        if((eq.cards||[]).length>0){
+          const errs=validateCards(eq,item.assignedCards||[],qty,rec.start,rec.end,recId);
+          if(errs.length)return json(res,400,{error:`${eq.name}：${errs.join('；')}`});
+        }
+      }
+
+      rec.equipment=b.equipment.map(e=>({
+        id:e.id,qty:Number(e.qty),
+        name:e.name||(db.equipment.find(x=>x.id===e.id)||{name:e.id}).name,
+        assignedCards:Array.isArray(e.assignedCards)?e.assignedCards.filter(Boolean):[]
+      }));
+      const validKeys=new Set(rec.equipment.map(e=>e.id+'__'+e.qty));
+      rec.returnedItems=(rec.returnedItems||[]).filter(k=>validKeys.has(k));
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
+    }
+
+    // ── Admin: create a new member (single-item — never touches other members) ──
+    if(m==='POST'&&p==='/api/admin/members'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const name=String(b.name||'').trim();
+      if(!name)return json(res,400,{error:'請輸入姓名'});
+      if(db.members.find(x=>x.name===name))return json(res,400,{error:'此姓名已存在'});
+      const mem={
+        id:'m'+Date.now(),
+        name,
+        dept:String(b.dept||'').trim(),
+        sid:String(b.sid||'').trim(),
+        phone:String(b.phone||'').trim(),
+        email:String(b.email||'').trim(),
+        isOfficer:!!b.isOfficer,
+        taskCount:0
+      };
+      db.members.push(mem);
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
+    }
+
+    // ── Admin: full edit of one member by id ──
+    if(m==='PUT'&&p.match(/^\/api\/admin\/members\/[^/]+$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const mem=db.members.find(x=>x.id===memId);
+      if(!mem)return json(res,404,{error:'社員不存在'});
+      const name=String(b.name||'').trim();
+      if(!name)return json(res,400,{error:'請輸入姓名'});
+      if(db.members.find(x=>x.id!==memId&&x.name===name))return json(res,400,{error:'此姓名已存在'});
+      mem.name=name;
+      mem.dept=String(b.dept||'').trim();
+      mem.sid=String(b.sid||'').trim();
+      mem.phone=String(b.phone||'').trim();
+      mem.email=String(b.email||'').trim();
+      mem.isOfficer=!!b.isOfficer;
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
+    }
+
+    // ── Admin: delete one member by id ──
+    if(m==='DELETE'&&p.match(/^\/api\/admin\/members\/[^/]+$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const idx=db.members.findIndex(x=>x.id===memId);
+      if(idx===-1)return json(res,404,{error:'社員不存在'});
+      db.members.splice(idx,1);
+      writeDB(db);
+      return json(res,200,{ok:true,deletedId:memId});
+    }
+
+    // ── Admin: set/unset officer status for one member by id ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/officer$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const mem=db.members.find(x=>x.id===memId);
+      if(!mem)return json(res,404,{error:'社員不存在'});
+      mem.isOfficer=!!b.isOfficer;
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
+    }
+
+    // ── Admin: adjust one member's taskCount by a delta (+1 / -1), floored at 0 ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/task-count$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const mem=db.members.find(x=>x.id===memId);
+      if(!mem)return json(res,404,{error:'社員不存在'});
+      const delta=Number(b.delta)||0;
+      mem.taskCount=Math.max(0,(mem.taskCount||0)+delta);
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
+    }
+
+    // ── Admin: redeem 3 task-count for 1 personal-borrow credit, for one member ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/redeem$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const mem=db.members.find(x=>x.id===memId);
+      if(!mem)return json(res,404,{error:'社員不存在'});
+      if((mem.taskCount||0)<3)return json(res,400,{error:'任務場次不足 3 場，無法兌換'});
+      mem.taskCount-=3;
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
     }
 
     // ── Member submit borrow ──
