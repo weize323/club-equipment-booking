@@ -92,6 +92,17 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .time-reminder{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:7px 10px;font-size:12px;color:#854d0e;margin-bottom:8px}
 .badge-officer{background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-size:10px;padding:1px 6px;border-radius:20px;font-weight:600}
 .badge-normal{background:#f1f5f9;color:#64748b;font-size:10px;padding:1px 6px;border-radius:20px}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:36px}
+.pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;background:none;border:none;font-size:15px;color:#9ca3af;padding:2px;line-height:1}
+.pw-eye:hover{color:#374151}
+.card-mini-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f3f4f6}
+.card-mini-row:last-child{border-bottom:none}
+.card-status-select{padding:3px 6px;font-size:11px;border:1px solid #d1d5db;border-radius:5px;width:auto}
+.drag-loc{cursor:grab;padding:6px 4px;display:flex;align-items:center;gap:8px}
+.drag-loc.dragging-loc{opacity:.4}
+.drag-loc.drop-target-loc{outline:2px dashed #1d4ed8}
+.forgot-link{font-size:12px;color:#3b82f6;cursor:pointer;text-align:center;margin-top:10px;display:block;background:none;border:none;text-decoration:underline}
 </style>
 </head>
 <body>
@@ -100,10 +111,55 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div id="login-box">
     <h2 style="font-size:17px;font-weight:600;margin-bottom:16px">🎬 器材借用 <span style="font-size:12px;color:#9ca3af;font-weight:400">管理員</span></h2>
     <label>密碼</label>
-    <input type="password" id="login-pw" placeholder="輸入管理員密碼">
+    <div class="pw-wrap">
+      <input type="password" id="login-pw" placeholder="輸入管理員密碼">
+      <button type="button" class="pw-eye" onclick="togglePwVisibility('login-pw',this)">👁</button>
+    </div>
     <div class="err" id="login-err" style="display:none">密碼錯誤或連線失敗</div>
     <button class="btn btn-primary w-full" onclick="doLogin()" style="margin-top:12px">登入</button>
-    <p style="font-size:11px;color:#d1d5db;margin-top:10px;text-align:center">預設密碼：admin123</p>
+    <button type="button" class="forgot-link" onclick="openForgotPassword()">忘記密碼？</button>
+  </div>
+</div>
+
+<!-- Modal: 忘記密碼 -->
+<div class="modal-bg" id="modal-forgot">
+  <div class="modal" style="width:400px">
+    <h3>🔑 忘記密碼</h3>
+    <div id="forgot-step-email">
+      <p class="text-muted" style="margin-bottom:12px">請輸入系統設定中的管理員 Email，我們會寄送重設密碼連結。</p>
+      <label>管理員 Email</label>
+      <input type="email" id="forgot-email" placeholder="admin@example.com">
+      <div class="err" id="forgot-err" style="display:none"></div>
+      <div id="forgot-success" style="display:none;color:#059669;font-size:12px;margin-top:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px">
+        如果信箱正確，您將收到密碼重設信件。請至信箱查收（含垃圾郵件夾）。
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal('modal-forgot')">取消</button>
+        <button class="btn btn-primary" id="forgot-send-btn" onclick="sendForgotPassword()">寄送重設連結</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: 重設密碼（從 Email 連結進入） -->
+<div class="modal-bg" id="modal-reset-password">
+  <div class="modal" style="width:400px">
+    <h3>🔑 設定新密碼</h3>
+    <input type="hidden" id="reset-token">
+    <label>新密碼</label>
+    <div class="pw-wrap">
+      <input type="password" id="reset-new-pw">
+      <button type="button" class="pw-eye" onclick="togglePwVisibility('reset-new-pw',this)">👁</button>
+    </div>
+    <label>確認新密碼</label>
+    <div class="pw-wrap">
+      <input type="password" id="reset-confirm-pw">
+      <button type="button" class="pw-eye" onclick="togglePwVisibility('reset-confirm-pw',this)">👁</button>
+    </div>
+    <div class="err" id="reset-pw-err" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary w-full" onclick="doResetPassword()">設定新密碼並登入</button>
+    </div>
   </div>
 </div>
 
@@ -241,10 +297,13 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 <!-- PAGE: 社員管理 -->
 <div class="page" id="page-members">
   <div class="section-header"><h2>社員管理</h2><button class="btn btn-primary" onclick="openAddMember()">新增社員</button></div>
+  <div class="card" style="margin-bottom:10px">
+    <p class="text-muted">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
+  </div>
   <div class="card">
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
+        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
         <tbody id="members-body"></tbody>
       </table>
     </div>
@@ -305,18 +364,21 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div id="setting-pw">
     <div class="card" style="max-width:380px">
       <div class="card-title">修改管理員密碼</div>
-      <label>目前密碼</label><input type="password" id="s-old-pw">
-      <label>新密碼</label><input type="password" id="s-new-pw">
-      <label>確認新密碼</label><input type="password" id="s-confirm-pw">
+      <label>目前密碼</label>
+      <div class="pw-wrap"><input type="password" id="s-old-pw"><button type="button" class="pw-eye" onclick="togglePwVisibility('s-old-pw',this)">👁</button></div>
+      <label>新密碼</label>
+      <div class="pw-wrap"><input type="password" id="s-new-pw"><button type="button" class="pw-eye" onclick="togglePwVisibility('s-new-pw',this)">👁</button></div>
+      <label>確認新密碼</label>
+      <div class="pw-wrap"><input type="password" id="s-confirm-pw"><button type="button" class="pw-eye" onclick="togglePwVisibility('s-confirm-pw',this)">👁</button></div>
       <div class="err" id="s-pw-err" style="display:none"></div>
       <button class="btn btn-primary" onclick="changePw()" style="margin-top:10px">更新密碼</button>
       <div id="s-pw-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">密碼已更新 ✓</div>
     </div>
   </div>
   <div id="setting-location" style="display:none">
-    <div class="card" style="max-width:480px">
+    <div class="card" style="max-width:520px">
       <div class="card-title">位置管理</div>
-      <p class="text-muted" style="margin-bottom:12px">管理器材存放位置清單，編輯器材時可從下拉選單選取。</p>
+      <p class="text-muted" style="margin-bottom:12px">☰ 拖曳可調整順序。編輯位置名稱時，所有使用該位置的器材會自動同步更新。</p>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <input type="text" id="new-loc-input" placeholder="輸入新位置名稱" style="flex:1">
         <button class="btn btn-primary btn-sm" onclick="addLocation()" style="padding:7px 14px">新增</button>
@@ -345,15 +407,35 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div id="setting-email" style="display:none">
     <div class="card" style="max-width:560px">
       <div class="card-title">EmailJS 設定</div>
-      <p class="text-muted" style="margin-bottom:10px">至 <a href="https://www.emailjs.com" target="_blank" style="color:#1d4ed8">emailjs.com</a> 免費註冊後填入。模板變數：<code>{{to_name}}</code> <code>{{borrow_items}}</code> <code>{{borrow_start}}</code> <code>{{borrow_end}}</code></p>
+      <p class="text-muted" style="margin-bottom:10px">至 <a href="https://www.emailjs.com" target="_blank" style="color:#1d4ed8">emailjs.com</a> 免費註冊。三種信件用途不同，<strong>建議在 EmailJS 建立三個獨立模板</strong>並分別填入對應 Template ID，避免內容互相混用；若某項留空，會自動改用上方的預設 Template ID。</p>
       <div class="inline-form" style="margin-top:0">
         <div><label>Service ID</label><input type="text" id="ejs-service" placeholder="service_xxxxxxx"></div>
-        <div><label>Template ID</label><input type="text" id="ejs-template" placeholder="template_xxxxxxx"></div>
+        <div><label>預設 Template ID</label><input type="text" id="ejs-template" placeholder="template_xxxxxxx"></div>
       </div>
       <label>Public Key</label><input type="text" id="ejs-pubkey">
+      <label>管理員 Email（用於收借用通知信、忘記密碼重設信）</label>
+      <input type="email" id="ejs-admin-email" placeholder="admin@example.com">
+      <hr>
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">① 審核通過通知（寄給申請人）</div>
+      <label>專屬 Template ID <span class="text-muted" style="font-size:10px">（留空則用上方預設）</span></label>
+      <input type="text" id="ejs-template-approve" placeholder="留空使用預設 Template ID">
+      <p class="text-muted" style="margin-bottom:6px">模板變數：<code>{{to_name}}</code> <code>{{borrow_items}}</code> <code>{{borrow_start}}</code> <code>{{borrow_end}}</code></p>
       <label>郵件主旨</label><input type="text" id="email-subject">
       <label>郵件內文</label>
-      <textarea id="email-body" rows="6" style="resize:vertical;font-size:12px;font-family:monospace"></textarea>
+      <textarea id="email-body" rows="5" style="resize:vertical;font-size:12px;font-family:monospace"></textarea>
+      <hr>
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">② 新借用申請通知（寄給管理員）</div>
+      <label>專屬 Template ID <span class="text-muted" style="font-size:10px">（留空則用上方預設）</span></label>
+      <input type="text" id="notify-template" placeholder="留空使用預設 Template ID">
+      <p class="text-muted" style="margin-bottom:6px">額外變數：<code>{{dept}}</code> <code>{{sid}}</code> <code>{{phone}}</code> <code>{{email}}</code> <code>{{taskName}}</code></p>
+      <label>通知主旨</label><input type="text" id="notify-subject">
+      <label>通知內文</label>
+      <textarea id="notify-body" rows="7" style="resize:vertical;font-size:12px;font-family:monospace"></textarea>
+      <hr>
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">③ 忘記密碼重設信（寄給管理員）</div>
+      <label>專屬 Template ID <span class="text-muted" style="font-size:10px">（留空則用上方預設）</span></label>
+      <input type="text" id="reset-template" placeholder="留空使用預設 Template ID">
+      <p class="text-muted">重設信內容由系統自動產生（含一次性連結），不可自訂內文。</p>
       <button class="btn btn-primary" onclick="saveEmailSettings()" style="margin-top:10px">儲存 Email 設定</button>
       <div id="email-save-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">已儲存 ✓</div>
     </div>
@@ -437,7 +519,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 </div>
 
 <div class="modal-bg" id="modal-eq">
-  <div class="modal">
+  <div class="modal" style="width:640px">
     <h3 id="modal-eq-title">新增器材</h3>
     <input type="hidden" id="eq-edit-id">
     <div class="inline-form" style="margin-top:0">
@@ -447,14 +529,20 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       </div>
       <div>
         <label>分類</label>
-        <select id="eq-type">
+        <select id="eq-type" onchange="onEqTypeChange()">
           <option>相機</option><option>攝影機</option><option>鏡頭</option><option>濾鏡</option>
           <option>麥克風</option><option>燈光</option><option>腳架</option><option>記憶卡</option><option>配件</option>
         </select>
       </div>
     </div>
     <div class="inline-form">
-      <div><label>數量</label><input type="number" id="eq-qty" value="1" min="1" max="99"></div>
+      <div><label>總數量 qty</label><input type="number" id="eq-qty" value="1" min="1" max="99" onchange="onEqQtyChange()"></div>
+      <div>
+        <label>可借上限 usableQty <span class="text-muted" style="font-size:10px">（管理員手動設定，顯示固定，不隨借出減少）</span></label>
+        <input type="number" id="eq-usableQty" value="1" min="0" max="99">
+      </div>
+    </div>
+    <div class="inline-form">
       <div>
         <label>器材狀態</label>
         <select id="eq-eqStatus">
@@ -465,18 +553,24 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
           <option value="disabled">🚫 停用／不可借</option>
         </select>
       </div>
-    </div>
-    <div class="inline-form">
       <div>
         <label>存放位置</label>
         <select id="eq-location"><option value="">未指定</option></select>
       </div>
-      <div><label>財產歸屬</label><input type="text" id="eq-ownership" placeholder="例：社團、林○○"></div>
     </div>
+    <label>財產歸屬</label><input type="text" id="eq-ownership" placeholder="例：社團、林○○">
     <label>備註 / 狀態說明</label>
     <textarea id="eq-note" rows="2" style="resize:vertical" placeholder="例：鏡頭有輕微霉斑"></textarea>
-    <label>記憶卡卡號（每行一個，僅記憶卡類型需填）</label>
-    <textarea id="eq-card-numbers" rows="3" style="resize:vertical;font-family:monospace" placeholder="#7&#10;#8&#10;#9"></textarea>
+
+    <div id="eq-card-section" style="display:none;margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label style="margin:0">📇 記憶卡逐張管理</label>
+        <button type="button" class="btn btn-sm" onclick="addCardRow()">+ 新增卡號</button>
+      </div>
+      <div id="eq-card-list" style="max-height:220px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:7px;padding:8px"></div>
+      <p class="text-muted" style="margin-top:5px">每張卡片可獨立設定狀態；刪除卡號會同步更新總數量。</p>
+    </div>
+
     <label>可借類別</label>
     <div style="margin-top:5px;display:flex;gap:16px">
       <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-p" style="width:auto"> 個人借用</label>
@@ -484,6 +578,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-t" checked style="width:auto"> 社內任務</label>
     </div>
     <div class="err" id="err-eq-allow" style="display:none">請至少勾選一個類別（停用除外）</div>
+    <div class="err" id="err-eq-cards" style="display:none"></div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-eq')">取消</button>
       <button class="btn btn-primary" onclick="saveEquipment()">儲存</button>
@@ -666,12 +761,6 @@ async function doLogin(){
     document.getElementById('login-err').style.display='block';
   }
 }
-async function tryRestoreSession(){
-  try{
-    await loadAdminState();
-    document.getElementById('login-overlay').style.display='none';
-  }catch{}
-}
 async function loadAdminState(){
   const d=await api('/api/admin/state');
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
@@ -742,7 +831,8 @@ function getOccupied(eqId,start,end,excludeId){
 function getAvail(eqId,start,end,excludeId){
   const e=equipment.find(x=>x.id===eqId);
   if(!e||e.eqStatus==='disabled'||e.eqStatus==='lost')return 0;
-  return Math.max(0,e.qty-getOccupied(eqId,start,end,excludeId));
+  const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
+  return Math.max(0,usableQty-getOccupied(eqId,start,end,excludeId));
 }
 // Cards in use for eqId during [start,end] window, excluding one record
 // start/end optional: if omitted, all active records considered
@@ -815,11 +905,20 @@ function renderEqList(){
     if(search&&!e.name.toLowerCase().includes(search))return false;
     return true;
   });
+  // Sort by admin-configured category order, then by equipment's own array order within category
+  items.sort((a,b)=>{
+    const ca=catOrder.indexOf(a.type), cb=catOrder.indexOf(b.type);
+    if(ca!==cb)return(ca<0?999:ca)-(cb<0?999:cb);
+    return equipment.indexOf(a)-equipment.indexOf(b);
+  });
   if(!items.length){el.innerHTML='<div class="text-muted" style="padding:8px 0">無符合器材</div>';return;}
   el.innerHTML=items.map(e=>{
-    const avail=hasTime?getAvail(e.id,start,end):e.qty;
+    const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
+    const avail=hasTime?getAvail(e.id,start,end):usableQty;
+    const maxSelectable=hasTime?avail:usableQty;
     const sel=selectedEq[e.id]||0;
-    const availTxt=hasTime?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`:`<span style="color:#9ca3af">${e.qty} 台</span>`;
+    // Display is ALWAYS qty/usableQty — never shrinks when something is borrowed
+    const availTxt=`<span style="color:#374151">${e.qty}/${usableQty}</span>${hasTime&&avail<=0?' <span class="avail-warn">（此時段已滿）</span>':''}`;
     const st=eqStatusLabel(e.eqStatus||'available');
     const locTxt=e.location?`<span class="loc-chip">${e.location}</span>`:'';
     const noteTxt=e.note?`<div style="font-size:11px;color:#9ca3af;margin-top:1px">${e.note}</div>`:'';
@@ -834,7 +933,7 @@ function renderEqList(){
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn btn-sm" onclick="changeEq('${e.id}',-1)" ${sel<=0?'disabled':''} style="${sel<=0?'opacity:.3':''}">−</button>
         <span style="min-width:16px;text-align:center;font-weight:600;font-size:13px">${sel}</span>
-        <button class="btn btn-sm" onclick="changeEq('${e.id}',1)" ${sel>=(hasTime?avail:e.qty)?'disabled':''} style="${sel>=(hasTime?avail:e.qty)?'opacity:.3':''}">+</button>
+        <button class="btn btn-sm" onclick="changeEq('${e.id}',1)" ${sel>=maxSelectable?'disabled':''} style="${sel>=maxSelectable?'opacity:.3':''}">+</button>
       </div>
     </div>`;
   }).join('');
@@ -843,7 +942,9 @@ function renderEqList(){
 function changeEq(id,delta){
   const start=document.getElementById('b-start').value,end=document.getElementById('b-end').value;
   const hasTime=start&&end&&new Date(end)>new Date(start);
-  const avail=hasTime?getAvail(id,start,end):(equipment.find(x=>x.id===id)||{qty:0}).qty;
+  const eqObj=equipment.find(x=>x.id===id)||{qty:0,usableQty:0};
+  const usableQty=(eqObj.usableQty!=null?eqObj.usableQty:eqObj.qty);
+  const avail=hasTime?getAvail(id,start,end):usableQty;
   const cur=selectedEq[id]||0,next=Math.max(0,Math.min(avail,cur+delta));
   if(next===0){delete selectedEq[id];delete assignedCards[id];}else selectedEq[id]=next;
   renderEqList();renderSelected();
@@ -858,8 +959,8 @@ function renderSelected(){
     const e=equipment.find(x=>x.id===id);
     return`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${e?e.name:id}</span><span style="color:#9ca3af">× ${selectedEq[id]}</span></div>`;
   }).join('');
-  // Card assignment for memory cards
-  const memIds=ids.filter(id=>{const e=equipment.find(x=>x.id===id);return e&&(e.cardNumbers||[]).length>0;});
+  // Card assignment for memory cards — only status==='available' cards are selectable
+  const memIds=ids.filter(id=>{const e=equipment.find(x=>x.id===id);return e&&(e.cards||[]).length>0;});
   const wrap=document.getElementById('card-assign-wrap');
   if(memIds.length){
     wrap.style.display='block';
@@ -868,15 +969,16 @@ function renderSelected(){
       const e=equipment.find(x=>x.id===id);
       const qty=selectedEq[id];
       const busy=getBusyCards(id,start||null,end||null,null);
-      const avail=(e.cardNumbers||[]).filter(c=>!busy.has(c));
+      // Only offer cards whose status is 'available' (repair/lost/disabled/in_use are excluded)
+      const selectableCards=(e.cards||[]).filter(c=>c.status==='available');
       let rows='';
       for(let i=0;i<qty;i++){
         const cur=(assignedCards[id]||[])[i]||'';
         rows+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <span style="min-width:50px;font-size:12px;color:#6b7280">第${i+1}張</span>
           <select onchange="setCard('${id}',${i},this.value)" style="flex:1;padding:4px 6px;font-size:12px;border:1px solid #d1d5db;border-radius:5px">
-            <option value="">（不指定）</option>
-            ${(e.cardNumbers||[]).map(c=>`<option value="${c}" ${busy.has(c)?'disabled':''} ${cur===c?'selected':''}>${c}${busy.has(c)?' (借出中)':''}</option>`).join('')}
+            <option value="" ${!cur?'selected':''}>（不指定）</option>
+            ${selectableCards.map(c=>`<option value="${c.number}" ${busy.has(c.number)?'disabled':''} ${cur===c.number?'selected':''}>${c.number}${busy.has(c.number)?' (時段已借)':''}</option>`).join('')}
           </select>
         </div>`;
       }
@@ -957,6 +1059,8 @@ async function submitBorrow(){
   showE('err-eq',!Object.keys(selectedEq).length);
   if(!name||!dept||!sid||!phone||!email||!cat||(cat==='task'&&!taskName)||!start||!end||new Date(end)<=new Date(start)||!Object.keys(selectedEq).length)return;
 
+  // Memory cards: "不指定" is a valid final choice — submitting with zero cards
+  // chosen is allowed; whatever IS chosen is still validated server-side.
   const eqItems=Object.entries(selectedEq).map(([id,qty])=>{
     const e=equipment.find(x=>x.id===id);
     const cards=(assignedCards[id]||[]).filter(Boolean);
@@ -1085,20 +1189,22 @@ function renderRecEqAdd(){
   const existing=new Set((r.equipment||[]).map(e=>e.id));
   const items=equipment.filter(e=>!existing.has(e.id)&&e.eqStatus!=='disabled'&&e.eqStatus!=='lost'&&(!search||e.name.toLowerCase().includes(search)));
   document.getElementById('rec-eq-add-list').innerHTML=items.map(e=>{
+    const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
     const avail=getAvail(e.id,r.start,r.end,r.id);
-    const hasCards=(e.cardNumbers||[]).length>0;
+    const hasCards=(e.cards||[]).length>0;
     const busyCards=getBusyCards(e.id,r.start,r.end,r.id);
-    const availCards=(e.cardNumbers||[]).filter(c=>!busyCards.has(c));
+    // Only status==='available' cards are selectable, and must not be time-busy
+    const selectableCards=(e.cards||[]).filter(c=>c.status==='available'&&!busyCards.has(c.number));
     return`<div class="eq-item">
       <div>
         <div class="eq-name" style="font-size:12px">${e.name}</div>
-        <div class="eq-count">${e.type}・可用 ${avail}/${e.qty}</div>
+        <div class="eq-count">${e.type}・可借 ${avail}（${e.qty}/${usableQty}）</div>
       </div>
       <div style="display:flex;align-items:center;gap:5px">
         <input type="number" id="add-qty-${e.id}" value="1" min="1" max="${Math.max(1,avail)}" style="width:44px;padding:3px 5px;font-size:12px;border:1px solid #d1d5db;border-radius:5px">
         ${hasCards?`<select id="add-card-${e.id}" style="font-size:12px;padding:3px 5px;border:1px solid #d1d5db;border-radius:5px">
           <option value="">不指定</option>
-          ${(e.cardNumbers||[]).map(c=>`<option value="${c}" ${busyCards.has(c)?'disabled':''}>${c}${busyCards.has(c)?' ✗':''}</option>`).join('')}
+          ${selectableCards.map(c=>`<option value="${c.number}">${c.number}</option>`).join('')}
         </select>`:''}
         <button class="btn btn-sm btn-success" onclick="addRecEq('${e.id}')">加入</button>
       </div>
@@ -1147,7 +1253,8 @@ async function approveBorrow(){
   if(r.cat==='task'){let m=members.find(x=>x.sid===r.sid||x.name===r.name);if(m)m.taskCount=(m.taskCount||0)+1;await apiPut('members',members);}
   await apiPut('records',records);
   closeModal('modal-approve');renderRecords();
-  if(r.email&&emailSettings.serviceId&&emailSettings.templateId&&emailSettings.pubKey)sendApprovalEmail(r);
+  const approveTid=emailSettings.approveTemplateId||emailSettings.templateId;
+  if(r.email&&emailSettings.serviceId&&approveTid&&emailSettings.pubKey)sendApprovalEmail(r);
   else alert('審核通過！（Email 尚未設定）');
 }
 async function rejectBorrow(){
@@ -1158,7 +1265,9 @@ async function rejectBorrow(){
 function sendApprovalEmail(r){
   emailjs.init(emailSettings.pubKey);
   const bodyText=(emailSettings.body||'').replace(/{{to_name}}/g,r.name).replace(/{{borrow_items}}/g,(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')).replace(/{{borrow_start}}/g,fmtDate(r.start)).replace(/{{borrow_end}}/g,fmtDate(r.end));
-  emailjs.send(emailSettings.serviceId,emailSettings.templateId,{to_email:r.email,to_name:r.name,subject:emailSettings.subject,message:bodyText,borrow_items:(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、'),borrow_start:fmtDate(r.start),borrow_end:fmtDate(r.end)})
+  // Use dedicated approve template if set, otherwise fall back to the default Template ID
+  const tid=emailSettings.approveTemplateId||emailSettings.templateId;
+  emailjs.send(emailSettings.serviceId,tid,{to_email:r.email,to_name:r.name,subject:emailSettings.subject,message:bodyText,borrow_items:(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、'),borrow_start:fmtDate(r.start),borrow_end:fmtDate(r.end)})
     .then(()=>alert('審核通過，Email 已寄出！')).catch(e=>{console.error(e);alert('審核通過，但 Email 失敗：'+e.text);});
 }
 
@@ -1210,7 +1319,12 @@ function renderMembers(){
     const officerBtn=m.isOfficer
       ?`<button class="btn btn-sm btn-warn" onclick="setOfficer('${m.id}',false)">取消幹部</button>`
       :`<button class="btn btn-sm btn-purple" onclick="setOfficer('${m.id}',true)">設為幹部</button>`;
-    return`<tr>
+    return`<tr draggable="true" data-id="${m.id}"
+      ondragstart="memberDragStart(event,'${m.id}')"
+      ondragover="memberDragOver(event,'${m.id}')"
+      ondrop="memberDragDrop(event,'${m.id}')"
+      ondragleave="memberDragLeave(event)">
+      <td><span class="drag-handle">☰</span></td>
       <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
       <td>${officerBadge}</td>
       <td>${tc} 場</td>
@@ -1229,6 +1343,24 @@ function renderMembers(){
       </td>
     </tr>`;
   }).join('');
+}
+
+// ═══ MEMBER DRAG-REORDER (mirrors equipment drag-sort, no type restriction) ═══
+let dragMemberId=null;
+function memberDragStart(e,id){dragMemberId=id;e.currentTarget.classList.add('dragging');e.stopPropagation();}
+function memberDragOver(e,id){
+  e.preventDefault();
+  if(dragMemberId&&dragMemberId!==id)e.currentTarget.classList.add('drop-target');
+}
+function memberDragLeave(e){e.currentTarget.classList.remove('drop-target');}
+async function memberDragDrop(e,targetId){
+  e.currentTarget.classList.remove('drop-target');
+  if(!dragMemberId||dragMemberId===targetId)return;
+  const src=members.find(x=>x.id===dragMemberId),tgt=members.find(x=>x.id===targetId);
+  if(!src||!tgt)return;
+  const si=members.indexOf(src),ti=members.indexOf(tgt);
+  members.splice(si,1);members.splice(ti,0,src);
+  await apiPut('members',members);renderMembers();dragMemberId=null;
 }
 function openAddMember(){
   document.getElementById('modal-member-title').textContent='新增社員';
@@ -1305,14 +1437,18 @@ function renderEquipment(){
       <td colspan="10">☰ <strong>${type}</strong> <span style="font-weight:400;color:#9ca3af;font-size:11px">（${group.length} 項）</span></td>
     </tr>`;
     group.forEach(e=>{
-      const inUse=records.filter(r=>{const st=computeStatus(r);return st!=='done'&&st!=='pending';}).reduce((s,r)=>{
-        const item=(r.equipment||[]).find(x=>x.id===e.id);
-        if(item&&!(r.returnedItems||[]).includes(item.id+'__'+item.qty))return s+item.qty;return s;
-      },0);
-      const avail=e.eqStatus==='disabled'||e.eqStatus==='lost'?0:Math.max(0,e.qty-inUse);
+      const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
       const stLabel=eqStatusLabel(e.eqStatus||'available');
       const dotCls=eqStatusDotClass(e.eqStatus||'available');
-      const cardStr=(e.cardNumbers||[]).length?`<br><span style="font-size:10px;color:#9ca3af">${(e.cardNumbers||[]).join(' ')}</span>`:'';
+      const isMemCard=e.type==='記憶卡'&&(e.cards||[]).length>0;
+      let cardStr='';
+      if(isMemCard){
+        const availCount=e.cards.filter(c=>c.status==='available').length;
+        cardStr=`<br><span style="font-size:10px;color:#9ca3af">${e.cards.map(c=>{
+          const dot={available:'🟢',in_use:'🟡',repair:'🔴',lost:'⚫',disabled:'🚫'}[c.status]||'🟢';
+          return dot+c.number;
+        }).join(' ')}</span>`;
+      }
       html+=`<tr draggable="true" data-id="${e.id}" data-type="${e.type}"
         ondragstart="eqDragStart(event,'${e.id}')"
         ondragover="eqDragOver(event,'${e.id}')"
@@ -1320,12 +1456,12 @@ function renderEquipment(){
         ondragleave="eqDragLeave(event)"
         style="${e.eqStatus==='disabled'?'opacity:.55':''}">
         <td><span class="drag-handle">☰</span></td>
-        <td style="max-width:160px">${e.name}${cardStr}</td>
+        <td style="max-width:180px">${e.name}${cardStr}</td>
         <td><span class="badge badge-done">${e.type}</span></td>
         <td><span class="eq-status-dot ${dotCls}"></span><span style="font-size:11px">${stLabel}</span></td>
         <td style="font-size:11px">${e.location?`<span class="loc-chip">${e.location}</span>`:'—'}</td>
         <td style="font-size:11px">${e.ownership?`<span class="own-chip">${e.ownership}</span>`:'—'}</td>
-        <td style="font-size:12px">${e.qty}/<span style="color:${avail>0?'#059669':'#dc2626'}">${avail}</span></td>
+        <td style="font-size:12px">${e.qty}/<span style="color:#1d4ed8;font-weight:600">${usableQty}</span></td>
         <td style="font-size:11px">${e.eqStatus==='disabled'?'停用':(e.allow||[]).map(a=>catLabel(a)).join('、')}</td>
         <td style="font-size:11px;max-width:120px;color:#6b7280">${e.note||'—'}</td>
         <td>
@@ -1372,16 +1508,66 @@ function populateLocSelect(selId,current){
   const sel=document.getElementById(selId);
   sel.innerHTML=`<option value="">未指定</option>`+locations.map(l=>`<option value="${l}" ${l===current?'selected':''}>${l}</option>`).join('');
 }
+// Working copy of cards while modal is open
+let _eqCardsWorking=[];
+
+function onEqTypeChange(){
+  const type=document.getElementById('eq-type').value;
+  document.getElementById('eq-card-section').style.display=type==='記憶卡'?'block':'none';
+}
+function onEqQtyChange(){
+  // If not a memory card, sync usableQty default suggestion only when adding new (not forced)
+}
+function renderCardList(){
+  const el=document.getElementById('eq-card-list');
+  if(!_eqCardsWorking.length){el.innerHTML='<p class="text-muted" style="padding:6px 0">尚無卡號，請點「+ 新增卡號」</p>';return;}
+  el.innerHTML=_eqCardsWorking.map((c,i)=>`
+    <div class="card-mini-row">
+      <input type="text" value="${c.number}" style="width:90px;padding:3px 6px;font-size:12px" onchange="updateCardNumber(${i},this.value)">
+      <select class="card-status-select" onchange="updateCardStatus(${i},this.value)">
+        <option value="available" ${c.status==='available'?'selected':''}>✅ 可借用</option>
+        <option value="in_use" ${c.status==='in_use'?'selected':''}>🟡 使用中</option>
+        <option value="repair" ${c.status==='repair'?'selected':''}>🔴 維修中</option>
+        <option value="lost" ${c.status==='lost'?'selected':''}>⚫ 遺失</option>
+        <option value="disabled" ${c.status==='disabled'?'selected':''}>🚫 停用</option>
+      </select>
+      <button type="button" class="btn btn-sm btn-danger" onclick="removeCardRow(${i})" style="margin-left:auto">刪除</button>
+    </div>`).join('');
+  // Sync qty display to card count
+  document.getElementById('eq-qty').value=_eqCardsWorking.length;
+}
+function addCardRow(){
+  let n=1;
+  const existing=new Set(_eqCardsWorking.map(c=>c.number));
+  while(existing.has('#'+n))n++;
+  _eqCardsWorking.push({number:'#'+n,status:'available'});
+  renderCardList();
+}
+function updateCardNumber(idx,val){
+  val=val.trim();if(!val)return;
+  _eqCardsWorking[idx].number=val;
+}
+function updateCardStatus(idx,val){
+  _eqCardsWorking[idx].status=val;
+}
+function removeCardRow(idx){
+  _eqCardsWorking.splice(idx,1);
+  renderCardList();
+}
+
 function openAddEq(){
   document.getElementById('modal-eq-title').textContent='新增器材';
   document.getElementById('eq-edit-id').value='';
   document.getElementById('eq-name').value='';document.getElementById('eq-qty').value='1';
+  document.getElementById('eq-usableQty').value='1';
   document.getElementById('eq-type').value='相機';document.getElementById('eq-eqStatus').value='available';
   document.getElementById('eq-ownership').value='';document.getElementById('eq-note').value='';
-  document.getElementById('eq-card-numbers').value='';
+  _eqCardsWorking=[];
+  document.getElementById('eq-card-section').style.display='none';
+  renderCardList();
   ['eq-p','eq-e','eq-t'].forEach((id,i)=>document.getElementById(id).checked=i===2);
   populateLocSelect('eq-location','');
-  ['err-eq-name','err-eq-allow'].forEach(id=>document.getElementById(id).style.display='none');
+  ['err-eq-name','err-eq-allow','err-eq-cards'].forEach(id=>document.getElementById(id).style.display='none');
   openModal('modal-eq');
 }
 function openEditEq(id){
@@ -1389,34 +1575,62 @@ function openEditEq(id){
   document.getElementById('modal-eq-title').textContent='編輯器材';
   document.getElementById('eq-edit-id').value=id;
   document.getElementById('eq-name').value=e.name;document.getElementById('eq-qty').value=e.qty;
+  document.getElementById('eq-usableQty').value=(e.usableQty!=null?e.usableQty:e.qty);
   document.getElementById('eq-type').value=e.type;document.getElementById('eq-eqStatus').value=e.eqStatus||'available';
   document.getElementById('eq-ownership').value=e.ownership||'';document.getElementById('eq-note').value=e.note||'';
-  document.getElementById('eq-card-numbers').value=(e.cardNumbers||[]).join('\n');
+  // Load cards: prefer e.cards, fallback to cardNumbers migration
+  if(e.cards&&e.cards.length){
+    _eqCardsWorking=e.cards.map(c=>({number:c.number,status:c.status||'available'}));
+  }else if(e.cardNumbers&&e.cardNumbers.length){
+    _eqCardsWorking=e.cardNumbers.map(n=>({number:n,status:'available'}));
+  }else{
+    _eqCardsWorking=[];
+  }
+  document.getElementById('eq-card-section').style.display=e.type==='記憶卡'?'block':'none';
+  renderCardList();
   document.getElementById('eq-p').checked=(e.allow||[]).includes('personal');
   document.getElementById('eq-e').checked=(e.allow||[]).includes('event');
   document.getElementById('eq-t').checked=(e.allow||[]).includes('task');
   populateLocSelect('eq-location',e.location||'');
-  ['err-eq-name','err-eq-allow'].forEach(id=>document.getElementById(id).style.display='none');
+  ['err-eq-name','err-eq-allow','err-eq-cards'].forEach(id=>document.getElementById(id).style.display='none');
   openModal('modal-eq');
 }
 async function saveEquipment(){
   const name=document.getElementById('eq-name').value.trim();
   const type=document.getElementById('eq-type').value;
-  const qty=parseInt(document.getElementById('eq-qty').value)||1;
   const eqStatus=document.getElementById('eq-eqStatus').value;
   const location=document.getElementById('eq-location').value;
   const ownership=document.getElementById('eq-ownership').value.trim();
   const note=document.getElementById('eq-note').value.trim();
-  const cardNumbers=document.getElementById('eq-card-numbers').value.split('\n').map(s=>s.trim()).filter(Boolean);
   const allow=['personal','event','task'].filter((_,i)=>document.getElementById(['eq-p','eq-e','eq-t'][i]).checked);
   if(!name){document.getElementById('err-eq-name').style.display='block';return;}
   if(eqStatus!=='disabled'&&!allow.length){document.getElementById('err-eq-allow').style.display='block';return;}
+
+  let qty, cardNumbers, cards;
+  const isMemCard=type==='記憶卡';
+  if(isMemCard){
+    // Validate card numbers: non-empty, unique
+    const nums=_eqCardsWorking.map(c=>c.number.trim()).filter(Boolean);
+    if(!nums.length){document.getElementById('err-eq-cards').textContent='記憶卡至少需要一張卡號';document.getElementById('err-eq-cards').style.display='block';return;}
+    if(new Set(nums).size!==nums.length){document.getElementById('err-eq-cards').textContent='卡號不可重複';document.getElementById('err-eq-cards').style.display='block';return;}
+    document.getElementById('err-eq-cards').style.display='none';
+    qty=_eqCardsWorking.length;
+    cardNumbers=nums;
+    cards=_eqCardsWorking.map(c=>({number:c.number.trim(),status:c.status}));
+  }else{
+    qty=parseInt(document.getElementById('eq-qty').value)||1;
+    cardNumbers=[];cards=[];
+  }
+  let usableQty=parseInt(document.getElementById('eq-usableQty').value);
+  if(isNaN(usableQty)||usableQty<0)usableQty=qty;
+  if(usableQty>qty)usableQty=qty; // usableQty cannot exceed total qty
+
   const editId=document.getElementById('eq-edit-id').value;
   if(editId){
     const e=equipment.find(x=>x.id===editId);
     if(e){
       const oldType=e.type;
-      Object.assign(e,{name,type,qty,eqStatus,location,ownership,note,cardNumbers,allow:eqStatus==='disabled'?[]:allow});
+      Object.assign(e,{name,type,qty,usableQty,eqStatus,location,ownership,note,cardNumbers,cards,allow:eqStatus==='disabled'?[]:allow});
       if(oldType!==type){
         equipment.splice(equipment.indexOf(e),1);
         const li=equipment.map(x=>x.type).lastIndexOf(type);
@@ -1424,10 +1638,9 @@ async function saveEquipment(){
       }
     }
   }else{
-    const newE={id:'e'+Date.now(),name,type,qty,eqStatus,location,ownership,note,cardNumbers,allow:eqStatus==='disabled'?[]:allow};
+    const newE={id:'e'+Date.now(),name,type,qty,usableQty,eqStatus,location,ownership,note,cardNumbers,cards,allow:eqStatus==='disabled'?[]:allow};
     const li=equipment.map(x=>x.type).lastIndexOf(type);
     equipment.splice(li>=0?li+1:equipment.length,0,newE);
-    // Add type to catOrder if new
     if(!catOrder.includes(type)){catOrder.push(type);await apiPut('catOrder',catOrder);}
   }
   await apiPut('equipment',equipment);closeModal('modal-eq');renderEquipment();renderEqList();
@@ -1471,12 +1684,52 @@ async function changePw(){
   }catch(e){err.textContent=e.message||'目前密碼不正確';err.style.display='block';}
 }
 // Locations
+let dragLocIdx=null;
 function renderLocationList(){
   document.getElementById('location-list').innerHTML=locations.map((l,i)=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
-      <span style="font-size:13px">${l}</span>
-      <button class="btn btn-sm btn-danger" onclick="removeLocation(${i})">刪除</button>
+    <div class="drag-loc" draggable="true" data-idx="${i}"
+      ondragstart="locDragStart(event,${i})" ondragover="locDragOver(event,${i})"
+      ondrop="locDragDrop(event,${i})" ondragleave="locDragLeave(event)"
+      style="justify-content:space-between;border-bottom:1px solid #f3f4f6">
+      <div style="display:flex;align-items:center;gap:8px;flex:1">
+        <span class="drag-handle">☰</span>
+        <span id="loc-display-${i}" style="font-size:13px">${l}</span>
+        <input id="loc-edit-${i}" type="text" value="${l}" style="display:none;font-size:13px;padding:3px 6px;flex:1;max-width:200px">
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-sm" id="loc-editbtn-${i}" onclick="toggleLocEdit(${i})">編輯</button>
+        <button class="btn btn-sm btn-danger" onclick="removeLocation(${i})">刪除</button>
+      </div>
     </div>`).join('');
+}
+function toggleLocEdit(i){
+  const disp=document.getElementById('loc-display-'+i);
+  const edit=document.getElementById('loc-edit-'+i);
+  const btn=document.getElementById('loc-editbtn-'+i);
+  const isEditing=edit.style.display!=='none';
+  if(isEditing){
+    // Save
+    const newName=edit.value.trim();
+    if(newName&&newName!==locations[i]){
+      renameLocation(locations[i],newName,i);
+    }else{
+      disp.style.display='inline';edit.style.display='none';btn.textContent='編輯';
+    }
+  }else{
+    disp.style.display='none';edit.style.display='inline-block';btn.textContent='儲存';
+    edit.focus();
+  }
+}
+async function renameLocation(oldName,newName,idx){
+  try{
+    const d=await api('/api/admin/locations/rename',{method:'POST',body:JSON.stringify({oldName,newName})});
+    locations[idx]=newName;
+    // Sync local equipment cache too (server already synced its own copy)
+    equipment.forEach(e=>{if(e.location===oldName)e.location=newName;});
+    renderLocationList();
+    renderEquipment();
+    if(d.syncedEquipment>0)alert(`已更新位置名稱，並同步 ${d.syncedEquipment} 件器材`);
+  }catch(e){alert('重新命名失敗：'+e.message);}
 }
 async function addLocation(){
   const val=document.getElementById('new-loc-input').value.trim();
@@ -1485,8 +1738,28 @@ async function addLocation(){
   document.getElementById('new-loc-input').value='';renderLocationList();
 }
 async function removeLocation(i){
-  if(!confirm('確定刪除此位置？'))return;
-  locations.splice(i,1);await apiPut('locations',locations);renderLocationList();
+  const name=locations[i];
+  try{
+    await api('/api/admin/locations/delete',{method:'POST',body:JSON.stringify({name})});
+    locations.splice(i,1);renderLocationList();
+  }catch(e){
+    // No force-delete option: a location still in use can never be removed.
+    // The admin must reassign every affected equipment's location first.
+    alert('刪除失敗：'+e.message);
+  }
+}
+// Location drag reorder
+function locDragStart(e,idx){dragLocIdx=idx;e.currentTarget.classList.add('dragging-loc');e.stopPropagation();}
+function locDragOver(e,idx){e.preventDefault();if(dragLocIdx!==null&&dragLocIdx!==idx)e.currentTarget.classList.add('drop-target-loc');}
+function locDragLeave(e){e.currentTarget.classList.remove('drop-target-loc');}
+async function locDragDrop(e,targetIdx){
+  e.currentTarget.classList.remove('drop-target-loc');
+  if(dragLocIdx===null||dragLocIdx===targetIdx)return;
+  const moved=locations.splice(dragLocIdx,1)[0];
+  locations.splice(targetIdx,0,moved);
+  await apiPut('locations',locations);
+  renderLocationList();
+  dragLocIdx=null;
 }
 // Placeholders
 function loadPlaceholdersUI(){
@@ -1502,11 +1775,29 @@ function loadEmailUI(){
   document.getElementById('ejs-service').value=emailSettings.serviceId||'';
   document.getElementById('ejs-template').value=emailSettings.templateId||'';
   document.getElementById('ejs-pubkey').value=emailSettings.pubKey||'';
+  document.getElementById('ejs-admin-email').value=emailSettings.adminEmail||'';
   document.getElementById('email-subject').value=emailSettings.subject||'';
   document.getElementById('email-body').value=emailSettings.body||'';
+  document.getElementById('ejs-template-approve').value=emailSettings.approveTemplateId||'';
+  document.getElementById('notify-subject').value=emailSettings.notifySubject||'【器材借用通知】新的借用申請';
+  document.getElementById('notify-body').value=emailSettings.notifyBody||'有新的借用申請需要審核。\n\n申請人：{{to_name}}\n系級：{{dept}}\n學號：{{sid}}\n電話：{{phone}}\n申請人Email：{{email}}\n\n任務名稱：{{taskName}}\n\n借用日期：{{borrow_start}}\n歸還日期：{{borrow_end}}\n\n申請器材：\n{{borrow_items}}\n\n請至管理員後台查看並審核。';
+  document.getElementById('notify-template').value=emailSettings.notifyTemplateId||'';
+  document.getElementById('reset-template').value=emailSettings.resetTemplateId||'';
 }
 async function saveEmailSettings(){
-  emailSettings={serviceId:document.getElementById('ejs-service').value.trim(),templateId:document.getElementById('ejs-template').value.trim(),pubKey:document.getElementById('ejs-pubkey').value.trim(),subject:document.getElementById('email-subject').value.trim(),body:document.getElementById('email-body').value};
+  emailSettings={
+    serviceId:document.getElementById('ejs-service').value.trim(),
+    templateId:document.getElementById('ejs-template').value.trim(),
+    pubKey:document.getElementById('ejs-pubkey').value.trim(),
+    adminEmail:document.getElementById('ejs-admin-email').value.trim(),
+    subject:document.getElementById('email-subject').value.trim(),
+    body:document.getElementById('email-body').value,
+    approveTemplateId:document.getElementById('ejs-template-approve').value.trim(),
+    notifySubject:document.getElementById('notify-subject').value.trim(),
+    notifyBody:document.getElementById('notify-body').value,
+    notifyTemplateId:document.getElementById('notify-template').value.trim(),
+    resetTemplateId:document.getElementById('reset-template').value.trim()
+  };
   await apiPut('emailSettings',emailSettings);
   document.getElementById('email-save-ok').style.display='block';setTimeout(()=>document.getElementById('email-save-ok').style.display='none',2000);
 }
@@ -1530,7 +1821,7 @@ function openCardAssign(recId, eqId){
   const eqItem=(r.equipment||[]).find(x=>x.id===eqId);
   if(!eqItem)return;
   const eqDef=equipment.find(x=>x.id===eqId);
-  const allCards=(eqDef&&eqDef.cardNumbers)||[];
+  const allCards=(eqDef&&eqDef.cards)||[];
   const currentCards=eqItem.assignedCards||[];
 
   // Which cards are busy in OTHER records with time overlap
@@ -1550,10 +1841,14 @@ function openCardAssign(recId, eqId){
     rows+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <span style="min-width:50px;font-size:12px;color:#6b7280;flex-shrink:0">第 ${i+1} 張</span>
       <select id="ca-sel-${i}" style="flex:1;padding:6px 8px;font-size:13px;border:1px solid #d1d5db;border-radius:7px">
-        <option value="">（不指定）</option>
+        <option value="" ${!cur?'selected':''}>（不指定）</option>
         ${allCards.map(c=>{
-          const isBusy=busyElsewhere.has(c)&&c!==cur;
-          return`<option value="${c}" ${c===cur?'selected':''} ${isBusy?'disabled':''}>${c}${isBusy?' 〔借出中〕':''}</option>`;
+          const cn=c.number;
+          const isTimeBusy=busyElsewhere.has(cn)&&cn!==cur;
+          const isBadStatus=c.status!=='available'&&cn!==cur;
+          const disabled=isTimeBusy||isBadStatus;
+          const label=isTimeBusy?' 〔時段已借〕':(isBadStatus?' 〔'+c.status+'〕':'');
+          return`<option value="${cn}" ${cn===cur?'selected':''} ${disabled?'disabled':''}>${cn}${label}</option>`;
         }).join('')}
       </select>
       <span id="ca-status-${i}" style="font-size:11px;min-width:48px">${cur?`<span style="color:#059669">已指定</span>`:'<span style="color:#9ca3af">未指定</span>'}</span>
@@ -1578,7 +1873,8 @@ async function saveCardAssign(){
     chosen.push(sel?sel.value:'');
   }
 
-  // Check for duplicate selections (excluding empty)
+  // "不指定" is valid — admin may leave some or all slots blank. Whatever IS chosen
+  // still must not be duplicated within this same assignment.
   const nonEmpty=chosen.filter(Boolean);
   if(new Set(nonEmpty).size!==nonEmpty.length){
     document.getElementById('ca-err').textContent='同一張卡號不能重複指定';
@@ -1795,6 +2091,79 @@ async function doLegacyImport(){
 }
 
 
+// ═══ PASSWORD SHOW/HIDE ═══
+function togglePwVisibility(inputId,btn){
+  const el=document.getElementById(inputId);
+  if(!el)return;
+  if(el.type==='password'){el.type='text';btn.textContent='🙈';}
+  else{el.type='password';btn.textContent='👁';}
+}
+
+// ═══ FORGOT PASSWORD ═══
+function openForgotPassword(){
+  document.getElementById('forgot-email').value='';
+  document.getElementById('forgot-err').style.display='none';
+  document.getElementById('forgot-success').style.display='none';
+  document.getElementById('forgot-step-email').style.display='block';
+  openModal('modal-forgot');
+}
+async function sendForgotPassword(){
+  const email=document.getElementById('forgot-email').value.trim();
+  const errEl=document.getElementById('forgot-err');
+  errEl.style.display='none';
+  if(!email){errEl.textContent='請輸入 Email';errEl.style.display='block';return;}
+  const btn=document.getElementById('forgot-send-btn');
+  if(btn)btn.disabled=true;
+  try{
+    await api('/api/admin/forgot-password',{method:'POST',body:JSON.stringify({email})});
+    document.getElementById('forgot-success').style.display='block';
+  }catch(e){
+    // Still show generic success message to avoid leaking info — but log for debugging
+    document.getElementById('forgot-success').style.display='block';
+  }finally{
+    if(btn)btn.disabled=false;
+  }
+}
+async function doResetPassword(){
+  const token=document.getElementById('reset-token').value;
+  const newPw=document.getElementById('reset-new-pw').value;
+  const confirmPw=document.getElementById('reset-confirm-pw').value;
+  const errEl=document.getElementById('reset-pw-err');
+  errEl.style.display='none';
+  if(!newPw||newPw.length<4){errEl.textContent='新密碼至少 4 碼';errEl.style.display='block';return;}
+  if(newPw!==confirmPw){errEl.textContent='兩次密碼不一致';errEl.style.display='block';return;}
+  try{
+    await api('/api/admin/reset-password',{method:'POST',body:JSON.stringify({token,newPassword:newPw})});
+    alert('密碼已重設成功，請使用新密碼登入。');
+    closeModal('modal-reset-password');
+    // Clean up URL
+    const url=new URL(window.location.href);
+    url.searchParams.delete('reset');
+    window.history.replaceState({},'',url.toString());
+  }catch(e){
+    errEl.textContent=e.message||'重設失敗，連結可能已過期';
+    errEl.style.display='block';
+  }
+}
+async function checkResetTokenOnLoad(){
+  const params=new URLSearchParams(window.location.search);
+  const token=params.get('reset');
+  if(!token)return;
+  try{
+    await api('/api/admin/verify-reset-token',{method:'POST',body:JSON.stringify({token})});
+    document.getElementById('reset-token').value=token;
+    document.getElementById('reset-new-pw').value='';
+    document.getElementById('reset-confirm-pw').value='';
+    document.getElementById('reset-pw-err').style.display='none';
+    openModal('modal-reset-password');
+  }catch(e){
+    alert('重設連結無效或已過期，請重新申請忘記密碼。');
+    const url=new URL(window.location.href);
+    url.searchParams.delete('reset');
+    window.history.replaceState({},'',url.toString());
+  }
+}
+
 // ═══ SESSION: /api/admin/check + /api/admin/logout ═══
 async function tryRestoreSession(){
   try{
@@ -1868,16 +2237,18 @@ function erRenderEqList(r){
     const key=e.id+'__'+e.qty;
     const isRet=returned.includes(key);
     const eqDef=equipment.find(x=>x.id===e.id);
-    const hasCards=eqDef&&(eqDef.cardNumbers||[]).length>0;
+    const hasCards=eqDef&&(eqDef.cards||[]).length>0;
     const cards=(e.assignedCards||[]).filter(Boolean);
 
     const cardSelects=hasCards?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">
       ${Array.from({length:e.qty},(_,i)=>{
         const cur=cards[i]||'';
         const busySet=getBusyCardsForEdit(e.id,r.id);
-        return`<select data-eq-idx="${idx}" data-card-idx="${i}" style="font-size:11px;padding:2px 4px;border:1px solid #d1d5db;border-radius:5px;max-width:110px" onchange="erCardChange(this)">
-          <option value="">卡號</option>
-          ${(eqDef.cardNumbers||[]).map(c=>`<option value="${c}" ${c===cur?'selected':''} ${busySet.has(c)&&c!==cur?'disabled':''}>${c}${busySet.has(c)&&c!==cur?' ✗':''}</option>`).join('')}
+        // Only status==='available' cards are selectable (plus the currently-assigned one so it doesn't vanish)
+        const selectableCards=(eqDef.cards||[]).filter(c=>c.status==='available'||c.number===cur);
+        return`<select data-eq-idx="${idx}" data-card-idx="${i}" style="font-size:11px;padding:2px 4px;border:1px solid #d1d5db;border-radius:5px;max-width:120px" onchange="erCardChange(this)">
+          <option value="" ${!cur?'selected':''}>（不指定）</option>
+          ${selectableCards.map(c=>`<option value="${c.number}" ${c.number===cur?'selected':''} ${busySet.has(c.number)&&c.number!==cur?'disabled':''} ${c.status!=='available'&&c.number!==cur?'disabled':''}>${c.number}${busySet.has(c.number)&&c.number!==cur?' ✗時段衝突':''}${c.status!=='available'&&c.number!==cur?' ✗'+c.status:''}</option>`).join('')}
         </select>`;
       }).join('')}
     </div>`:'';
@@ -1995,9 +2366,10 @@ async function saveEditRecord(){
     const qty=parseInt(qtyEl?qtyEl.value:eqItem.qty)||1;
     const retEl=document.getElementById('er-ret-'+idx);
     const isRet=retEl?retEl.checked:false;
-    // Collect assigned cards
+    // Collect assigned cards — "不指定" is valid; whatever IS chosen is validated server-side
     const cardSels=row.querySelectorAll('select[data-card-idx]');
-    const assignedCards=[...cardSels].map(s=>s.value).filter(Boolean);
+    const rawSelections=[...cardSels].map(s=>s.value);
+    const assignedCards=rawSelections.filter(Boolean);
     eqList.push({id:eqItem.id,qty,name:eqItem.name,assignedCards});
     if(isRet) retItems.push(eqItem.id+'__'+qty);
   }
@@ -2041,6 +2413,7 @@ async function saveEditRecord(){
 // Bootstrap: apply stored placeholders immediately (before login)
 loadPublicPlaceholders();
 tryRestoreSession();
+checkResetTokenOnLoad();
 </script>
 </body>
 </html>

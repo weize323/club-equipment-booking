@@ -197,7 +197,7 @@ async function cloudJson(url,opts={}){
 }
 
 // ═══ STATE (in-memory from server) ═══
-let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[],pubOfficerList=[];
+let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[];
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
@@ -227,20 +227,44 @@ async function loadPublicState(){
   pubPlaceholders=d.placeholders||{};
   pubLocations=d.locations||[];
   pubCatOrder=d.catOrder||[];
-  pubOfficerList=d.officerList||[];
   applyPlaceholders();
   setUDefaultTimes();
   renderUEqList();
   renderEqScheduleList('sch-search','sch-eq-list');
 }
 
-// Check if current form user is an officer (name+sid+phone must all match)
+// Officer status is checked server-side per-person (POST /api/member/check-officer) —
+// the client never receives the full officer roster, only a yes/no for the exact
+// name+sid+phone currently typed in. Result is cached and refreshed on input change.
+let _officerCheckKey='',_officerCheckResult=false;
 function isCurrentUserOfficer(){
+  // Synchronous read of the last server-confirmed result for the CURRENT form values.
+  // If the form values have changed since the last check, treat as "not yet confirmed"
+  // (false) until refreshOfficerStatus() resolves — this errs safely toward the
+  // ordinary-member ruleset rather than assuming officer privileges.
   const name=(document.getElementById('ub-name').value||'').trim();
   const sid =(document.getElementById('ub-sid').value||'').trim();
   const phone=(document.getElementById('ub-phone').value||'').trim();
-  if(!name||!sid||!phone) return false;
-  return pubOfficerList.some(o=>o.name===name&&o.sid===sid&&o.phone===phone);
+  const key=name+'|'+sid+'|'+phone;
+  return key===_officerCheckKey?_officerCheckResult:false;
+}
+let _officerCheckTimer=null;
+function refreshOfficerStatus(){
+  clearTimeout(_officerCheckTimer);
+  _officerCheckTimer=setTimeout(async()=>{
+    const name=(document.getElementById('ub-name').value||'').trim();
+    const sid =(document.getElementById('ub-sid').value||'').trim();
+    const phone=(document.getElementById('ub-phone').value||'').trim();
+    const key=name+'|'+sid+'|'+phone;
+    if(!name||!sid||!phone){_officerCheckKey=key;_officerCheckResult=false;renderUEqList();return;}
+    try{
+      const d=await cloudJson('/api/member/check-officer',{method:'POST',body:JSON.stringify({name,sid,phone})});
+      _officerCheckKey=key;_officerCheckResult=!!(d&&d.isOfficer);
+    }catch{
+      _officerCheckKey=key;_officerCheckResult=false;
+    }
+    if(document.getElementById('ub-cat').value)renderUEqList();
+  },300);
 }
 
 function applyPlaceholders(){
@@ -328,8 +352,9 @@ function renderEqScheduleList(searchId,listId){
   const items=pubEquipment.filter(e=>e.name.toLowerCase().includes(q));
   if(!items.length){el.innerHTML='<div style="color:#94a3b8;font-size:12px;padding:8px 0">無符合器材</div>';return;}
   el.innerHTML=items.map(e=>{
+    const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
     const schedules=getEqSchedules(e.id);
-    const cards=(e.cardNumbers||[]);
+    const cards=(e.cards||[]);
     const schHtml=!schedules.length?'<div style="color:#059669;font-size:12px">✓ 目前無借用紀錄，可申請</div>':
       schedules.map(r=>{
         const st=computeStatus(r);
@@ -340,15 +365,19 @@ function renderEqScheduleList(searchId,listId){
           ${usedCards.length?`<span class="card-chip">${usedCards.join(' ')}</span>`:''}
         </div>`;
       }).join('');
-    // Show available card numbers
+    // Show card numbers with real status (available/in_use/repair/lost/disabled) plus current time-window occupancy
     const busyCards=new Set();
     schedules.forEach(r=>{const item=(r.equipment||[]).find(x=>x.id===e.id);if(item)(item.assignedCards||[]).forEach(c=>busyCards.add(c));});
-    const availCards=cards.filter(c=>!busyCards.has(c));
     const cardInfo=cards.length?`<div style="font-size:11px;color:#6b7280;margin-bottom:4px">
-      卡號：${cards.map(c=>`<span style="margin-right:4px;color:${busyCards.has(c)?'#dc2626':'#059669'}">${c}${busyCards.has(c)?'✗':'✓'}</span>`).join('')}
+      卡號：${cards.map(c=>{
+        const statusLabel={available:'可借',in_use:'使用中',repair:'維修中',lost:'遺失',disabled:'停用'}[c.status]||c.status;
+        const isBusy=busyCards.has(c.number);
+        const ok=c.status==='available'&&!isBusy;
+        return`<span style="margin-right:6px;color:${ok?'#059669':'#dc2626'}">${c.number}${ok?'✓':`✗${isBusy?'(此時段已借)':'('+statusLabel+')'}`}</span>`;
+      }).join('')}
     </div>`:'';
     return`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${e.name} <span style="font-size:11px;font-weight:400;color:#94a3b8">（${e.qty}台）</span></div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">${e.name} <span style="font-size:11px;font-weight:400;color:#94a3b8">（${e.qty}/${usableQty}）</span></div>
       ${cardInfo}${schHtml}
     </div>`;
   }).join('');
@@ -368,6 +397,7 @@ function onUCatChange(){
   document.getElementById('ub-task-name-wrap').style.display=cat==='task'?'block':'none';
   document.getElementById('ub-collab-section').style.display=cat==='task'?'block':'none';
   renderUEqList();renderUSelected();
+  if(cat)refreshOfficerStatus(); // ensure officer status is checked even if name/sid/phone were filled before selecting a category
 }
 function filterUEqCat(cat,btn){
   uEqFilter=cat;
@@ -390,16 +420,20 @@ function getUOccupied(eqId,start,end){
 function getUAvail(eqId,start,end){
   const e=pubEquipment.find(x=>x.id===eqId);
   if(!e||e.eqStatus==='disabled'||e.eqStatus==='lost')return 0;
-  return Math.max(0,e.qty-getUOccupied(eqId,start,end));
+  const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
+  return Math.max(0,usableQty-getUOccupied(eqId,start,end));
 }
-function getBusyCards(eqId){
+// Cards busy for eqId during [start,end] time window (time-overlap aware)
+function getBusyCards(eqId,start,end){
+  const s=start?new Date(start):null,e=end?new Date(end):null;
   const busy=new Set();
   pubRecords.forEach(r=>{
     const st=computeStatus(r);if(st==='done'||st==='pending')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
     if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
-    (item.assignedCards||[]).forEach(c=>busy.add(c));
+    if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
+    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
   });
   return busy;
 }
@@ -437,11 +471,20 @@ function renderUEqList(){
     if(search&&!e.name.toLowerCase().includes(search))return false;
     return true;
   });
+  // Sort by admin-configured category order, then equipment's own array order within category
+  items.sort((a,b)=>{
+    const ca=pubCatOrder.indexOf(a.type), cb=pubCatOrder.indexOf(b.type);
+    if(ca!==cb)return(ca<0?999:ca)-(cb<0?999:cb);
+    return pubEquipment.indexOf(a)-pubEquipment.indexOf(b);
+  });
   if(!items.length){el.innerHTML='<div style="color:#94a3b8;padding:8px 0;font-size:13px">無符合器材</div>';return;}
   el.innerHTML=items.map(e=>{
-    const avail=hasTime?getUAvail(e.id,start,end):e.qty;
+    const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
+    const avail=hasTime?getUAvail(e.id,start,end):usableQty;
+    const maxSelectable=hasTime?avail:usableQty;
     const sel=uSelectedEq[e.id]||0;
-    const availTxt=hasTime?`<span class="${avail>0?'avail-ok':'avail-warn'}">${avail}/${e.qty} 可借</span>`:`<span style="color:#9ca3af">${e.qty} 台</span>`;
+    // Display is always fixed qty/usableQty — never shrinks when something is currently borrowed
+    const availTxt=`<span style="color:#475569">${e.qty}/${usableQty}</span>${hasTime&&avail<=0?' <span class="avail-warn">（此時段已滿）</span>':''}`;
     const schedules=getEqSchedules(e.id);
     const noteTxt=e.note?`<div style="font-size:11px;color:#9ca3af;margin-top:1px">${e.note}</div>`:'';
     const locTxt=e.location?`<span style="font-size:10px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;margin-left:4px">${e.location}</span>`:'';
@@ -459,7 +502,7 @@ function renderUEqList(){
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',-1)" ${sel<=0?'disabled':''} style="${sel<=0?'opacity:.3':''}">−</button>
         <span style="min-width:16px;text-align:center;font-weight:600;font-size:13px">${sel}</span>
-        <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',1)" ${sel>=(hasTime?avail:e.qty)?'disabled':''} style="${sel>=(hasTime?avail:e.qty)?'opacity:.3':''}">+</button>
+        <button class="btn btn-sm btn-outline" onclick="uChangeEq('${e.id}',1)" ${sel>=maxSelectable?'disabled':''} style="${sel>=maxSelectable?'opacity:.3':''}">+</button>
       </div>
     </div>`;
   }).join('');
@@ -471,7 +514,9 @@ function toggleSchTip(eqId,btn){
 function uChangeEq(id,delta){
   const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
   const hasTime=start&&end&&new Date(end)>new Date(start);
-  const avail=hasTime?getUAvail(id,start,end):(pubEquipment.find(x=>x.id===id)||{qty:0}).qty;
+  const eqObj=pubEquipment.find(x=>x.id===id)||{qty:0,usableQty:0};
+  const usableQty=(eqObj.usableQty!=null?eqObj.usableQty:eqObj.qty);
+  const avail=hasTime?getUAvail(id,start,end):usableQty;
   const cur=uSelectedEq[id]||0,next=Math.max(0,Math.min(avail,cur+delta));
   if(next===0){delete uSelectedEq[id];delete uAssignedCards[id];}else uSelectedEq[id]=next;
   renderUEqList();renderUSelected();
@@ -485,23 +530,25 @@ function renderUSelected(){
     const e=pubEquipment.find(x=>x.id===id);
     return`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px"><span>${e?e.name:id}</span><span style="color:#94a3b8">× ${uSelectedEq[id]}</span></div>`;
   }).join('');
-  // Card assignment
-  const memIds=ids.filter(id=>{const e=pubEquipment.find(x=>x.id===id);return e&&(e.cardNumbers||[]).length>0;});
+  // Card assignment — only status==='available' cards are selectable, plus time-window conflict check
+  const memIds=ids.filter(id=>{const e=pubEquipment.find(x=>x.id===id);return e&&(e.cards||[]).length>0;});
   const wrap=document.getElementById('ub-card-assign-wrap');
   if(memIds.length){
     wrap.style.display='block';
+    const start=document.getElementById('ub-start').value,end=document.getElementById('ub-end').value;
     document.getElementById('ub-card-assign-list').innerHTML=memIds.map(id=>{
       const e=pubEquipment.find(x=>x.id===id);
       const qty=uSelectedEq[id];
-      const busy=getBusyCards(id);
+      const busy=getBusyCards(id,start||null,end||null);
+      const selectableCards=(e.cards||[]).filter(c=>c.status==='available');
       let rows='';
       for(let i=0;i<qty;i++){
         const cur=(uAssignedCards[id]||[])[i]||'';
         rows+=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <span style="min-width:50px;font-size:12px;color:#6b7280">第${i+1}張</span>
-          <select onchange="setUCard('${id}',${i},this.value)" style="flex:1;padding:4px 6px;font-size:12px;border:1px solid #d1d5db;border-radius:5px">
-            <option value="">（不指定）</option>
-            ${(e.cardNumbers||[]).map(c=>`<option value="${c}" ${busy.has(c)?'disabled':''} ${cur===c?'selected':''}>${c}${busy.has(c)?' (借出中)':''}</option>`).join('')}
+          <select onchange="setUCard('${id}',${i},this.value)" style="flex:1;padding:4px 6px;font-size:12px;border:1px solid #cbd5e1;border-radius:5px">
+            <option value="" ${!cur?'selected':''}>（不指定）</option>
+            ${selectableCards.map(c=>`<option value="${c.number}" ${busy.has(c.number)?'disabled':''} ${cur===c.number?'selected':''}>${c.number}${busy.has(c.number)?' (此時段已借)':''}</option>`).join('')}
           </select>
         </div>`;
       }
@@ -547,6 +594,9 @@ async function submitUBorrow(){
   showUE('ub-err-eq',!Object.keys(uSelectedEq).length);
   if(!name||!dept||!sid||!phone||!email||!cat||(cat==='task'&&!taskName)||!start||!end||new Date(end)<=new Date(start)||!Object.keys(uSelectedEq).length)return;
 
+  // Memory cards: "不指定" is a valid final choice — members may submit with zero
+  // cards chosen; staff will assign the physical card later. Whatever IS chosen is
+  // still validated server-side (existence/availability/no-conflict/no-duplicate).
   const eqItems=Object.entries(uSelectedEq).map(([id,qty])=>{
     const e=pubEquipment.find(x=>x.id===id);
     const cards=(uAssignedCards[id]||[]).filter(Boolean);
@@ -581,11 +631,11 @@ async function submitUBorrow(){
   finally{if(btn)btn.disabled=false;}
 }
 
-// Re-render eq list when user changes name/sid/phone (officer status may change)
+// Re-check officer status (server-side, per-person) when user changes name/sid/phone
 ['ub-name','ub-sid','ub-phone'].forEach(id=>{
   const el=document.getElementById(id);
   if(el) el.addEventListener('input',()=>{
-    if(document.getElementById('ub-cat').value) renderUEqList();
+    if(document.getElementById('ub-cat').value){renderUEqList();refreshOfficerStatus();}
   });
 });
 
