@@ -884,14 +884,39 @@ const server=http.createServer(async(req,res)=>{
       const name=String(b.name||'').trim();
       if(!name)return json(res,400,{error:'請輸入姓名'});
       if(db.members.find(x=>x.id!==memId&&x.name===name))return json(res,400,{error:'此姓名已存在'});
+
+      // Capture the member's identity BEFORE overwriting. Historical borrow records
+      // are linked to a member by name+sid+phone (there is no member-id foreign key
+      // on records anywhere in this system), so this is the matching key needed to
+      // find which records belong to this member once their info changes.
+      const oldName=mem.name,oldSid=mem.sid,oldPhone=mem.phone;
+
       mem.name=name;
       mem.dept=String(b.dept||'').trim();
       mem.sid=String(b.sid||'').trim();
       mem.phone=String(b.phone||'').trim();
       mem.email=String(b.email||'').trim();
       mem.isOfficer=!!b.isOfficer;
+
+      // Sync every historical record that matched the OLD identity so past borrow
+      // records reflect the member's current name/dept/sid/phone instead of stale,
+      // pre-edit values. Guarded on oldName being non-empty to avoid ever matching
+      // on an all-blank identity.
+      let syncedRecords=0;
+      if(oldName){
+        db.records.forEach(r=>{
+          if(r.name===oldName&&r.sid===oldSid&&r.phone===oldPhone){
+            r.name=mem.name;
+            r.dept=mem.dept;
+            r.sid=mem.sid;
+            r.phone=mem.phone;
+            syncedRecords++;
+          }
+        });
+      }
+
       writeDB(db);
-      return json(res,200,{ok:true,member:mem});
+      return json(res,200,{ok:true,member:mem,syncedRecords});
     }
 
     // ── Admin: delete one member by id ──
