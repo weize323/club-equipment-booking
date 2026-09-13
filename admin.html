@@ -103,6 +103,22 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .drag-loc.dragging-loc{opacity:.4}
 .drag-loc.drop-target-loc{outline:2px dashed #1d4ed8}
 .forgot-link{font-size:12px;color:#3b82f6;cursor:pointer;text-align:center;margin-top:10px;display:block;background:none;border:none;text-decoration:underline}
+.cal-widget{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:14px;margin-bottom:14px}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-header strong{font-size:14px}
+.cal-nav-btn{background:none;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;color:#374151;font-family:inherit}
+.cal-nav-btn:hover{background:#f9fafb}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:12px}
+.cal-dow{text-align:center;color:#9ca3af;font-weight:600;padding:4px 0;font-size:11px}
+.cal-day{position:relative;text-align:center;padding:7px 0;border-radius:6px;cursor:pointer;color:#374151;background:#f9fafb;user-select:none}
+.cal-day:hover{background:#eff6ff}
+.cal-day.cal-empty{background:none;cursor:default}
+.cal-day.cal-has-record{background:#dbeafe;color:#1e40af;font-weight:600}
+.cal-day.cal-selected{background:#1d4ed8;color:#fff}
+.cal-day.cal-today{outline:2px solid #f59e0b;outline-offset:-2px}
+.cal-dot{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#3b82f6}
+.cal-day.cal-selected .cal-dot{background:#fff}
+.cal-clear-btn{font-size:12px;color:#1d4ed8;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:8px;font-family:inherit;padding:0}
 </style>
 </head>
 <body>
@@ -280,6 +296,18 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
   </div>
   <div class="stat-grid" id="records-stats"></div>
+  <div class="cal-widget">
+  <div class="cal-header">
+    <button type="button" class="cal-nav-btn" onclick="calChangeMonth(-1)">‹ 上個月</button>
+    <strong id="cal-month-label"></strong>
+    <button type="button" class="cal-nav-btn" onclick="calChangeMonth(1)">下個月 ›</button>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+  <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
+    已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
+    <button type="button" class="cal-clear-btn" onclick="calClearSelection()">顯示全部</button>
+  </div>
+</div>
   <div class="card">
     <div class="tbl-wrap">
       <table>
@@ -1091,7 +1119,88 @@ async function submitBorrow(){
 }
 
 // ═══ RECORDS ═══
+// ═══ RECORDS CALENDAR (pure vanilla, view-only filter helper — no server/API change) ═══
+let calViewYear=null,calViewMonth=null,calSelectedDate=null; // calSelectedDate format: 'YYYY-MM-DD'
+function calInit(){
+  const now=new Date();
+  if(calViewYear===null){calViewYear=now.getFullYear();calViewMonth=now.getMonth();}
+}
+function calChangeMonth(delta){
+  calInit();
+  calViewMonth+=delta;
+  if(calViewMonth<0){calViewMonth=11;calViewYear--;}
+  if(calViewMonth>11){calViewMonth=0;calViewYear++;}
+  renderCalendar();
+}
+function calDateKey(y,mo,d){return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
+// Set of 'YYYY-MM-DD' keys covered by any record's [start,end] date span
+function calRecordDateSet(){
+  const set=new Set();
+  records.forEach(r=>{
+    if(!r.start||!r.end)return;
+    const s=new Date(r.start),e=new Date(r.end);
+    if(isNaN(s)||isNaN(e))return;
+    const cur=new Date(s.getFullYear(),s.getMonth(),s.getDate());
+    const last=new Date(e.getFullYear(),e.getMonth(),e.getDate());
+    while(cur<=last){
+      set.add(calDateKey(cur.getFullYear(),cur.getMonth(),cur.getDate()));
+      cur.setDate(cur.getDate()+1);
+    }
+  });
+  return set;
+}
+function renderCalendar(){
+  calInit();
+  const y=calViewYear,mo=calViewMonth;
+  document.getElementById('cal-month-label').textContent=`${y} 年 ${mo+1} 月`;
+  const markedDates=calRecordDateSet();
+  const firstDow=new Date(y,mo,1).getDay();
+  const daysInMonth=new Date(y,mo+1,0).getDate();
+  const todayKey=calDateKey(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+  const dowLabels=['日','一','二','三','四','五','六'];
+  let html=dowLabels.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for(let i=0;i<firstDow;i++)html+=`<div class="cal-day cal-empty"></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const key=calDateKey(y,mo,d);
+    const hasRecord=markedDates.has(key);
+    const isSelected=calSelectedDate===key;
+    const isToday=key===todayKey;
+    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${hasRecord?'<span class="cal-dot"></span>':''}</div>`;
+  }
+  document.getElementById('cal-grid').innerHTML=html;
+}
+function calSelectDate(key){
+  calSelectedDate=(calSelectedDate===key)?null:key; // clicking the same day again clears the filter
+  const info=document.getElementById('cal-filter-info');
+  if(calSelectedDate){
+    info.style.display='block';
+    document.getElementById('cal-filter-date').textContent=calSelectedDate;
+  }else{
+    info.style.display='none';
+  }
+  renderCalendar();
+  renderRecords();
+}
+function calClearSelection(){
+  calSelectedDate=null;
+  document.getElementById('cal-filter-info').style.display='none';
+  renderCalendar();
+  renderRecords();
+}
+// Does record r's [start,end] date span include the given 'YYYY-MM-DD' date?
+function calRecordCoversDate(r,dateKey){
+  if(!r.start||!r.end)return false;
+  const s=new Date(r.start),e=new Date(r.end);
+  if(isNaN(s)||isNaN(e))return false;
+  const [y,mo,d]=dateKey.split('-').map(Number);
+  const target=new Date(y,mo-1,d);
+  const sDay=new Date(s.getFullYear(),s.getMonth(),s.getDate());
+  const eDay=new Date(e.getFullYear(),e.getMonth(),e.getDate());
+  return target>=sDay&&target<=eDay;
+}
+
 function renderRecords(){
+  renderCalendar();
   const sf=document.getElementById('filter-status').value;
   const cf=document.getElementById('filter-cat').value;
   const q=(document.getElementById('filter-search').value||'').toLowerCase();
@@ -1100,7 +1209,7 @@ function renderRecords(){
   if(sf!=='all')filtered=filtered.filter(r=>r.cs===sf);
   if(cf!=='all')filtered=filtered.filter(r=>r.cat===cf);
   if(q)filtered=filtered.filter(r=>r.name.toLowerCase().includes(q)||(r.sid||'').toLowerCase().includes(q)||(r.taskName||'').toLowerCase().includes(q));
-
+  if(calSelectedDate)filtered=filtered.filter(r=>calRecordCoversDate(r,calSelectedDate));
   const counts={pending:0,future:0,active:0,partial:0,overdue:0,done:0};
   computed.forEach(r=>{if(counts[r.cs]!=null)counts[r.cs]++;});
   document.getElementById('records-stats').innerHTML=[
