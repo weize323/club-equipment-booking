@@ -120,6 +120,12 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
 .cal-day.cal-selected .cal-dot{background:#fff!important}
 .cal-clear-btn{font-size:12px;color:#1d4ed8;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:8px;font-family:inherit;padding:0}
+.cal-color-settings{margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0}
+.cal-color-toggle{font-size:12px;color:#6b7280;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit}
+.cal-color-row{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
+.cal-color-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151}
+.cal-color-item input[type="color"]{width:28px;height:28px;padding:0;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;background:none}
+.cal-color-reset{font-size:12px;color:#dc2626;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;margin-left:auto}
 </style>
 </head>
 <body>
@@ -304,11 +310,22 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     <button type="button" class="cal-nav-btn" onclick="calChangeMonth(1)">下個月 ›</button>
   </div>
   <div class="cal-grid" id="cal-grid"></div>
-  <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
-    已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
-    <button type="button" class="cal-clear-btn" onclick="calClearSelection()">顯示全部</button>
+      <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
+      已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
+      <button type="button" class="cal-clear-btn" onclick="calClearSelection()">顯示全部</button>
+    </div>
+    <div class="cal-color-settings">
+      <button type="button" class="cal-color-toggle" onclick="toggleCalColorSettings()">🎨 類別顏色設定</button>
+      <div id="cal-color-panel" style="display:none">
+        <div class="cal-color-row">
+          <label class="cal-color-item">個人借用 <input type="color" id="cal-color-personal" onchange="updateCalColor('personal',this.value)"></label>
+          <label class="cal-color-item">社內任務 <input type="color" id="cal-color-task" onchange="updateCalColor('task',this.value)"></label>
+          <label class="cal-color-item">成發拍攝 <input type="color" id="cal-color-event" onchange="updateCalColor('event',this.value)"></label>
+          <button type="button" class="cal-color-reset" onclick="resetCalColors()">恢復預設值</button>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
   <div class="card">
     <div class="tbl-wrap">
       <table>
@@ -1133,14 +1150,57 @@ function calChangeMonth(delta){
   if(calViewMonth>11){calViewMonth=0;calViewYear++;}
   renderCalendar();
 }
-// Centralized color map for calendar dots by borrow category — edit HEX codes here any time.
-const CAL_CAT_COLORS = {
+// Centralized color map for calendar dots by borrow category — this object's
+// properties are mutated in place (never reassigned) so every existing reference
+// to CAL_CAT_COLORS stays valid whether the values are defaults or admin-picked.
+const CAL_CAT_COLORS_DEFAULT = {
   personal: '#ec4899', // 個人借用 (粉紅/桃紅)
   task:     '#10b981', // 社內任務 (綠)
   event:    '#f59e0b', // 成發拍攝 (橘黃)
   default:  '#3b82f6'  // 其他預設 (藍)
 };
+const CAL_CAT_COLORS = {...CAL_CAT_COLORS_DEFAULT};
 const CAL_MAX_DOTS = 4; // cap dots per day to keep the cell compact when many records overlap
+
+// Load any admin-customized colors from localStorage, falling back to defaults
+// for anything missing or if the saved value is malformed.
+function loadCalColors(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('cal_cat_colors')||'{}');
+    Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT,saved);
+  }catch{
+    Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT);
+  }
+}
+function saveCalColors(){
+  localStorage.setItem('cal_cat_colors',JSON.stringify(CAL_CAT_COLORS));
+}
+function syncCalColorInputs(){
+  const p=document.getElementById('cal-color-personal');
+  const t=document.getElementById('cal-color-task');
+  const e=document.getElementById('cal-color-event');
+  if(p)p.value=CAL_CAT_COLORS.personal;
+  if(t)t.value=CAL_CAT_COLORS.task;
+  if(e)e.value=CAL_CAT_COLORS.event;
+}
+function toggleCalColorSettings(){
+  const panel=document.getElementById('cal-color-panel');
+  const willOpen=panel.style.display==='none';
+  panel.style.display=willOpen?'block':'none';
+  if(willOpen)syncCalColorInputs();
+}
+function updateCalColor(cat,hex){
+  CAL_CAT_COLORS[cat]=hex;
+  saveCalColors();
+  renderCalendar();
+}
+function resetCalColors(){
+  Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT);
+  localStorage.removeItem('cal_cat_colors');
+  syncCalColorInputs();
+  renderCalendar();
+}
+loadCalColors(); // apply any saved custom colors immediately, before first renderCalendar() call
 
 function calDateKey(y,mo,d){return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 // Map of 'YYYY-MM-DD' → array of `cat` values for every record covering that day
