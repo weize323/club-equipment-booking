@@ -623,7 +623,7 @@ const server=http.createServer(async(req,res)=>{
 
 // Admin Categories CRUD
   if(p==='/api/admin/categories'&&m==='POST'){
-    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
     const b=await bodyJSON(req);
     const name=String(b.name||'').trim();
     const color=String(b.color||'#3b82f6').trim();
@@ -638,7 +638,7 @@ const server=http.createServer(async(req,res)=>{
   }
 
   if(p.startsWith('/api/admin/categories/')&&m==='PUT'){
-    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
     const id=p.split('/').pop();
     const b=await bodyJSON(req);
     const name=String(b.name||'').trim();
@@ -656,7 +656,7 @@ const server=http.createServer(async(req,res)=>{
   }
 
   if(p.startsWith('/api/admin/categories/')&&m==='DELETE'){
-    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
     const id=p.split('/').pop();
     const db=readDB();
     const cat=db.categories.find(c=>c.id===id);
