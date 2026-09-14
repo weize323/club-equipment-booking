@@ -148,6 +148,11 @@ const DEFAULT_PH={name:'輸入姓名',dept:'例：企管二乙',sid:'例：D1234
 const DEFAULT_EMAIL={serviceId:'',templateId:'',pubKey:'',adminEmail:'',subject:'【器材借用】您的申請已通過審核',body:'親愛的 {{to_name}} 同學您好，\n\n您的借用申請已通過審核！\n\n器材：{{borrow_items}}\n借出：{{borrow_start}}\n歸還：{{borrow_end}}\n\n如有問題請洽管理員。',notifySubject:'【器材借用通知】新的借用申請',notifyBody:'有新的借用申請需要審核。\n\n申請人：{{to_name}}\n系級：{{dept}}\n學號：{{sid}}\n電話：{{phone}}\n申請人Email：{{email}}\n\n任務名稱：{{taskName}}\n\n借用日期：{{borrow_start}}\n歸還日期：{{borrow_end}}\n\n申請器材：\n{{borrow_items}}\n\n請至管理員後台查看並審核。',notifyTemplateId:'',resetTemplateId:'',approveTemplateId:''};
 const DEFAULT_LOCATIONS=['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER=['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
+const DEFAULT_CATEGORIES=[
+  {id:'personal',name:'個人借用',color:'#ec4899',adminOnly:false,builtin:true},
+  {id:'task',name:'社內任務',color:'#10b981',adminOnly:false,builtin:true},
+  {id:'event',name:'成發拍攝',color:'#f59e0b',adminOnly:false,builtin:true}
+];
 
 // Fresh-install gate: creating a brand-new empty database is ONLY allowed when this
 // is explicitly set. In a normal Railway deploy this stays unset/false, so a missing
@@ -161,6 +166,7 @@ function initialDB(){
     records:[],members:[],equipment:DEFAULT_EQ,
     emailSettings:DEFAULT_EMAIL,placeholders:DEFAULT_PH,
     locations:DEFAULT_LOCATIONS,catOrder:DEFAULT_CAT_ORDER,
+    categories:DEFAULT_CATEGORIES,
     resetTokens:{}};
 }
 
@@ -210,6 +216,7 @@ function readDB(){
     // that would silently discard real configuration the admin already saved.
     if(!d.locations) d.locations=DEFAULT_LOCATIONS;
     if(!d.catOrder)  d.catOrder=DEFAULT_CAT_ORDER;
+    if(!d.categories||!d.categories.length) d.categories=DEFAULT_CATEGORIES;
     if(!d.placeholders) d.placeholders=DEFAULT_PH;
     if(d.placeholders.taskName===undefined) d.placeholders.taskName=DEFAULT_PH.taskName;
     if(!d.emailSettings) d.emailSettings=DEFAULT_EMAIL;
@@ -530,14 +537,15 @@ const server=http.createServer(async(req,res)=>{
     // per-person via POST /api/member/check-officer so anonymous visitors can
     // never harvest the full officer roster's personal data.
     if(m==='GET'&&p==='/api/public-state'){
-      return json(res,200,{
-        equipment:db.equipment,
-        records:publicRecords(),
-        placeholders:db.placeholders,
-        locations:db.locations,
-        catOrder:db.catOrder
-      });
-    }
+  return json(res,200,{
+    equipment:db.equipment,
+    records:publicRecords(),
+    placeholders:db.placeholders,
+    locations:db.locations,
+    catOrder:db.catOrder,
+    categories:(db.categories||[]).filter(c=>!c.adminOnly)
+  });
+}
 
     // ── Public: check if a specific person (by exact name+sid+phone match) is an officer ──
     // Returns ONLY a boolean — never the officer roster, never any member's stored data.
@@ -610,9 +618,57 @@ const server=http.createServer(async(req,res)=>{
     // ── Admin full state ──
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder});
+      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories||[]});
     }
 
+// Admin Categories CRUD
+  if(p==='/api/admin/categories'&&m==='POST'){
+    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    const b=await bodyJSON(req);
+    const name=String(b.name||'').trim();
+    const color=String(b.color||'#3b82f6').trim();
+    const adminOnly=!!b.adminOnly;
+    if(!name) return json(res,400,{error:'請輸入類別名稱'});
+    const db=readDB();
+    const id='cat_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    const newCat={id,name,color,adminOnly,builtin:false};
+    db.categories.push(newCat);
+    writeDB(db);
+    return json(res,200,{ok:true,category:newCat});
+  }
+
+  if(p.startsWith('/api/admin/categories/')&&m==='PUT'){
+    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    const id=p.split('/').pop();
+    const b=await bodyJSON(req);
+    const name=String(b.name||'').trim();
+    const color=String(b.color||'#3b82f6').trim();
+    const adminOnly=!!b.adminOnly;
+    if(!name) return json(res,400,{error:'請輸入類別名稱'});
+    const db=readDB();
+    const cat=db.categories.find(c=>c.id===id);
+    if(!cat) return json(res,404,{error:'找不到該類別'});
+    cat.name=name;
+    cat.color=color;
+    cat.adminOnly=adminOnly;
+    writeDB(db);
+    return json(res,200,{ok:true,category:cat});
+  }
+
+  if(p.startsWith('/api/admin/categories/')&&m==='DELETE'){
+    if(!checkAdmin(req)) return json(res,401,{error:'未登入'});
+    const id=p.split('/').pop();
+    const db=readDB();
+    const cat=db.categories.find(c=>c.id===id);
+    if(!cat) return json(res,404,{error:'找不到該類別'});
+    if(cat.builtin) return json(res,400,{error:'內建類別不可刪除'});
+    const inUse=db.records.some(r=>r.cat===id&&r.status!=='done'&&r.status!=='rejected');
+    if(inUse) return json(res,400,{error:'尚有進行中的借用使用此類別，無法刪除'});
+    db.categories=db.categories.filter(c=>c.id!==id);
+    writeDB(db);
+    return json(res,200,{ok:true});
+  }
+    
     // ── Admin bulk update any top-level key ──
     if(m==='PUT'&&p.startsWith('/api/admin/state/')){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
