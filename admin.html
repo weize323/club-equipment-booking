@@ -116,8 +116,9 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .cal-day.cal-has-record{background:#dbeafe;color:#1e40af;font-weight:600}
 .cal-day.cal-selected{background:#1d4ed8;color:#fff}
 .cal-day.cal-today{outline:2px solid #f59e0b;outline-offset:-2px}
-.cal-dot{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#3b82f6}
-.cal-day.cal-selected .cal-dot{background:#fff}
+.cal-dots-container{display:flex;gap:2px;justify-content:center;position:absolute;bottom:2px;left:0;right:0}
+.cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.cal-day.cal-selected .cal-dot{background:#fff!important}
 .cal-clear-btn{font-size:12px;color:#1d4ed8;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:8px;font-family:inherit;padding:0}
 </style>
 </head>
@@ -1132,10 +1133,20 @@ function calChangeMonth(delta){
   if(calViewMonth>11){calViewMonth=0;calViewYear++;}
   renderCalendar();
 }
+// Centralized color map for calendar dots by borrow category — edit HEX codes here any time.
+const CAL_CAT_COLORS = {
+  personal: '#ec4899', // 個人借用 (粉紅/桃紅)
+  task:     '#10b981', // 社內任務 (綠)
+  event:    '#f59e0b', // 成發拍攝 (橘黃)
+  default:  '#3b82f6'  // 其他預設 (藍)
+};
+const CAL_MAX_DOTS = 4; // cap dots per day to keep the cell compact when many records overlap
+
 function calDateKey(y,mo,d){return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
-// Set of 'YYYY-MM-DD' keys covered by any record's [start,end] date span
+// Map of 'YYYY-MM-DD' → array of `cat` values for every record covering that day
+// (one array entry per record; a day with 2 records has 2 entries, even if same cat).
 function calRecordDateSet(){
-  const set=new Set();
+  const map={};
   records.forEach(r=>{
     if(!r.start||!r.end)return;
     const s=new Date(r.start),e=new Date(r.end);
@@ -1143,17 +1154,19 @@ function calRecordDateSet(){
     const cur=new Date(s.getFullYear(),s.getMonth(),s.getDate());
     const last=new Date(e.getFullYear(),e.getMonth(),e.getDate());
     while(cur<=last){
-      set.add(calDateKey(cur.getFullYear(),cur.getMonth(),cur.getDate()));
+      const key=calDateKey(cur.getFullYear(),cur.getMonth(),cur.getDate());
+      if(!map[key])map[key]=[];
+      map[key].push(r.cat);
       cur.setDate(cur.getDate()+1);
     }
   });
-  return set;
+  return map;
 }
 function renderCalendar(){
   calInit();
   const y=calViewYear,mo=calViewMonth;
   document.getElementById('cal-month-label').textContent=`${y} 年 ${mo+1} 月`;
-  const markedDates=calRecordDateSet();
+  const dateMap=calRecordDateSet();
   const firstDow=new Date(y,mo,1).getDay();
   const daysInMonth=new Date(y,mo+1,0).getDate();
   const todayKey=calDateKey(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
@@ -1162,10 +1175,14 @@ function renderCalendar(){
   for(let i=0;i<firstDow;i++)html+=`<div class="cal-day cal-empty"></div>`;
   for(let d=1;d<=daysInMonth;d++){
     const key=calDateKey(y,mo,d);
-    const hasRecord=markedDates.has(key);
+    const cats=dateMap[key]||[];
+    const hasRecord=cats.length>0;
     const isSelected=calSelectedDate===key;
     const isToday=key===todayKey;
-    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${hasRecord?'<span class="cal-dot"></span>':''}</div>`;
+    const dotsHtml=hasRecord
+      ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${CAL_CAT_COLORS[cat]||CAL_CAT_COLORS.default}"></span>`).join('')}</div>`
+      :'';
+    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
