@@ -621,32 +621,34 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories||[]});
     }
 
-// Admin Create Record / Quick Marker
-  if(p==='/api/admin/records'&&m==='POST'){
-    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
-    const b=await bodyJSON(req);
-    const db=readDB();
-    const id='rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-    const newRecord={
-      id,
-      name: b.name || '[標記]',
-      sid: b.sid || 'ADMIN',
-      dept: b.dept || '',
-      phone: b.phone || '',
-      email: b.email || '',
-      cat: b.cat || 'task',
-      items: b.items || [],
-      equipment: b.equipment || [],
-      startDate: b.startDate,
-      endDate: b.endDate,
-      note: b.note || '',
-      status: b.status || 'approved',
-      createdAt: new Date().toISOString()
-    };
-    db.records.push(newRecord);
-    writeDB(db);
-    return json(res,200,{ok:true,record:newRecord});
-  }
+    // ── Admin: quick calendar mark — a pure note/tag record with no equipment and
+    // no borrower identity. Skips review entirely: status is ALWAYS forced to
+    // 'approved' server-side (never trusted from the client), so it can never sit
+    // in the pending-review queue or need anyone's approval. Marked with
+    // isQuickMark:true so the UI can render it distinctly and skip actions
+    // (approve/return/edit-equipment) that only make sense for a real borrow.
+    if(m==='POST'&&p==='/api/admin/quick-mark'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      if(!b.cat||!(db.categories||[]).some(c=>c.id===b.cat))return json(res,400,{error:'請選擇有效的標記類別'});
+      if(!b.start||!b.end)return json(res,400,{error:'請選擇日期'});
+      if(new Date(b.end)<new Date(b.start))return json(res,400,{error:'日期區間不正確'});
+      const rec={
+        id:'mark'+Date.now(),
+        isQuickMark:true,
+        name:'[管理員標記]',dept:'',sid:'',phone:'',email:'',
+        cat:b.cat,taskName:'',
+        start:b.start,end:b.end,
+        note:String(b.note||'').trim(),
+        equipment:[],collabs:[],
+        status:'approved', // forced — quick marks are never subject to review
+        returnedItems:[],
+        createdAt:new Date().toISOString()
+      };
+      db.records.unshift(rec);
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
+    }
     
 // Admin Categories CRUD
   if(p==='/api/admin/categories'&&m==='POST'){
