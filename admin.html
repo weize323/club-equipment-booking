@@ -172,28 +172,21 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   </div>
 </div>
 
-<!-- 快速日期標記 Modal -->
+<!-- Modal: 日曆快速標記（純備忘標籤，無器材、無借用人，免審核） -->
 <div class="modal-bg" id="modal-quick-mark">
-  <div class="modal" style="max-width:380px;">
-    <div class="modal-header">
-      <h3 style="margin:0;font-size:1.1rem;" id="quick-mark-title">新增日期標記</h3>
-      <button type="button" class="modal-close" onclick="closeModal('modal-quick-mark')">&times;</button>
-    </div>
-    <div style="padding:16px 0;display:flex;flex-direction:column;gap:12px;">
-      <input type="hidden" id="quick-mark-date">
-      <div>
-        <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">標記類別 *</label>
-        <select id="quick-mark-cat" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;"></select>
-      </div>
-      <div>
-        <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">備註 / 任務名稱（選填）</label>
-        <input type="text" id="quick-mark-note" placeholder="例如：器材定期保養、無借用日" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">
-      </div>
-      <div id="quick-mark-err" style="display:none;color:#ef4444;font-size:0.85rem;"></div>
-    </div>
-    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;">
-      <button type="button" class="btn" onclick="closeModal('modal-quick-mark')">取消</button>
-      <button type="button" class="btn btn-primary" onclick="submitQuickMark()">儲存標記</button>
+  <div class="modal" style="width:420px">
+    <h3>📌 快速標記</h3>
+    <p class="text-muted" style="margin-bottom:10px">純日曆備忘標籤，不涉及器材借用，儲存後立即生效，不會出現在待審核清單。</p>
+    <label>日期 *</label>
+    <input type="date" id="quick-mark-date">
+    <label>標記類別 *</label>
+    <select id="quick-mark-cat"></select>
+    <label>備註</label>
+    <textarea id="quick-mark-note" rows="2" style="resize:vertical" placeholder="選填，例如：社辦清潔日"></textarea>
+    <div class="err" id="quick-mark-err" style="display:none"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-quick-mark')">取消</button>
+      <button class="btn btn-primary" onclick="submitQuickMark()">儲存標記</button>
     </div>
   </div>
 </div>
@@ -360,10 +353,13 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div class="stat-grid" id="records-stats"></div>
   <div class="cal-widget">
   <div class="cal-header">
-    <button type="button" class="cal-nav-btn" onclick="calChangeMonth(-1)">‹ 上個月</button>
-    <strong id="cal-month-label"></strong>
+  <button type="button" class="cal-nav-btn" onclick="calChangeMonth(-1)">‹ 上個月</button>
+  <strong id="cal-month-label"></strong>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button type="button" class="cal-nav-btn" onclick="openQuickMarkModal()">📌 快速標記</button>
     <button type="button" class="cal-nav-btn" onclick="calChangeMonth(1)">下個月 ›</button>
   </div>
+</div>
   <div class="cal-grid" id="cal-grid"></div>
       <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
       已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
@@ -864,26 +860,6 @@ function renderCatDropdowns(){
   }
 }
 
-// ── 快速日期標記功能 ──
-function openQuickMarkModal(dateStr){
-  document.getElementById('quick-mark-date').value = dateStr;
-  document.getElementById('quick-mark-title').textContent = `📅 新增標記 (${dateStr})`;
-  document.getElementById('quick-mark-note').value = '';
-  document.getElementById('quick-mark-err').style.display = 'none';
-  
-  const list = (typeof categories !== 'undefined' && Array.isArray(categories) && categories.length)
-    ? categories
-    : [
-        {id:'personal', name:'個人借用'},
-        {id:'task', name:'社內任務'},
-        {id:'event', name:'成發拍攝'}
-      ];
-  const catSel = document.getElementById('quick-mark-cat');
-  catSel.innerHTML = list.map(c => `<option value="${c.id}">${c.name}${c.adminOnly ? ' (管理員限定)' : ''}</option>`).join('');
-  
-  openModal('modal-quick-mark');
-}
-
 async function submitQuickMark(){
   const dateStr = document.getElementById('quick-mark-date').value;
   const cat = document.getElementById('quick-mark-cat').value;
@@ -997,6 +973,39 @@ async function deleteCategory(id){
     syncAfterCategoryChange();
   }catch(e){
     errEl.textContent=e.message;
+    errEl.style.display='block';
+  }
+}
+
+// ═══ CALENDAR QUICK MARK (pure note/tag, no equipment, no reviewer step) ═══
+function openQuickMarkModal(){
+  const dateEl=document.getElementById('quick-mark-date');
+  dateEl.value=calSelectedDate||calDateKey(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+  const catSel=document.getElementById('quick-mark-cat');
+  catSel.innerHTML=categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('quick-mark-note').value='';
+  document.getElementById('quick-mark-err').style.display='none';
+  openModal('modal-quick-mark');
+}
+async function submitQuickMark(){
+  const dateStr=document.getElementById('quick-mark-date').value;
+  const cat=document.getElementById('quick-mark-cat').value;
+  const note=document.getElementById('quick-mark-note').value.trim();
+  const errEl=document.getElementById('quick-mark-err');
+  errEl.style.display='none';
+  if(!dateStr){errEl.textContent='請選擇日期';errEl.style.display='block';return;}
+  if(!cat){errEl.textContent='請選擇類別';errEl.style.display='block';return;}
+  try{
+    const d=await api('/api/admin/quick-mark',{
+      method:'POST',
+      body:JSON.stringify({cat,note,start:`${dateStr}T00:00`,end:`${dateStr}T23:59`})
+    });
+    records.unshift(d.record);
+    closeModal('modal-quick-mark');
+    renderCalendar();
+    if(document.getElementById('page-records').classList.contains('active'))renderRecords();
+  }catch(e){
+    errEl.textContent=e.message||'新增失敗';
     errEl.style.display='block';
   }
 }
@@ -1474,7 +1483,7 @@ function renderCalendar(){
     const dotsHtml=hasRecord
       ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${CAL_CAT_COLORS[cat]||CAL_CAT_COLORS.default}"></span>`).join('')}</div>`
       :'';
-    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}');openQuickMarkModal('${key}')">${d}${dotsHtml}</div>`;
+    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}');openQuickMarkModal()">${d}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
@@ -1532,6 +1541,18 @@ function renderRecords(){
   if(!filtered.length){tbody.innerHTML='';return;}
 
   tbody.innerHTML=filtered.map(r=>{
+    // Quick-mark records are pure calendar notes: no equipment, no borrower, no
+    // review step. Render a simplified row and skip every action that only makes
+    // sense for a real borrow (審核/歸還/修改器材/完整編輯) — only offer delete.
+    if(r.isQuickMark){
+      return`<tr style="background:#fafafa">
+        <td colspan="4">📌 ${catBadgeHtml(r.cat)} ${r.note?r.note:'<span style="color:#9ca3af">（無備註）</span>'}</td>
+        <td style="font-size:11px;white-space:nowrap">${fmtDate(r.start)}</td>
+        <td style="font-size:11px;white-space:nowrap">${fmtDate(r.end)}</td>
+        <td><span class="badge" style="background:#f1f5f9;color:#64748b">純標記</span></td>
+        <td><button class="btn btn-sm btn-danger" onclick="deleteRecord('${r.id}')">刪除標記</button></td>
+      </tr>`;
+    }
     const returned=r.returnedItems||[];
     const eqHtml=(r.equipment||[]).map(e=>{
       const key=e.id+'__'+e.qty,isRet=returned.includes(key);
