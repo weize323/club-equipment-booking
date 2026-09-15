@@ -171,6 +171,32 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
   </div>
 </div>
+
+<!-- 快速日期標記 Modal -->
+<div class="modal-backdrop" id="modal-quick-mark" style="display:none">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <h3 style="margin:0;font-size:1.1rem;" id="quick-mark-title">新增日期標記</h3>
+      <button type="button" class="modal-close" onclick="closeModal('modal-quick-mark')">&times;</button>
+    </div>
+    <div style="padding:16px 0;display:flex;flex-direction:column;gap:12px;">
+      <input type="hidden" id="quick-mark-date">
+      <div>
+        <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">標記類別 *</label>
+        <select id="quick-mark-cat" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;"></select>
+      </div>
+      <div>
+        <label style="font-size:0.85rem;font-weight:600;display:block;margin-bottom:4px;">備註 / 任務名稱（選填）</label>
+        <input type="text" id="quick-mark-note" placeholder="例如：器材定期保養、無借用日" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">
+      </div>
+      <div id="quick-mark-err" style="display:none;color:#ef4444;font-size:0.85rem;"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" class="btn" onclick="closeModal('modal-quick-mark')">取消</button>
+      <button type="button" class="btn btn-primary" onclick="submitQuickMark()">儲存標記</button>
+    </div>
+  </div>
+</div>
   
 <!-- Modal: 忘記密碼 -->
 <div class="modal-bg" id="modal-forgot">
@@ -838,6 +864,59 @@ function renderCatDropdowns(){
   }
 }
 
+// ── 快速日期標記功能 ──
+function openQuickMarkModal(dateStr){
+  document.getElementById('quick-mark-date').value = dateStr;
+  document.getElementById('quick-mark-title').textContent = `📅 新增標記 (${dateStr})`;
+  document.getElementById('quick-mark-note').value = '';
+  document.getElementById('quick-mark-err').style.display = 'none';
+  
+  const catSel = document.getElementById('quick-mark-cat');
+  catSel.innerHTML = categories.map(c => `<option value="${c.id}">${c.name}${c.adminOnly ? ' (管理員限定)' : ''}</option>`).join('');
+  
+  openModal('modal-quick-mark');
+}
+
+async function submitQuickMark(){
+  const dateStr = document.getElementById('quick-mark-date').value;
+  const cat = document.getElementById('quick-mark-cat').value;
+  const note = document.getElementById('quick-mark-note').value.trim();
+  const errEl = document.getElementById('quick-mark-err');
+  
+  if(!cat){
+    errEl.textContent = '請選擇類別';
+    errEl.style.display = 'block';
+    return;
+  }
+  
+  const payload = {
+    name: note ? `[標記] ${note}` : '[純標記]',
+    sid: 'ADMIN-MARK',
+    dept: '管理標記',
+    phone: '0000000000',
+    email: 'admin@system.local',
+    cat: cat,
+    items: [],
+    startDate: `${dateStr} 00:00`,
+    endDate: `${dateStr} 23:59`,
+    note: note,
+    status: 'approved'
+  };
+
+  try {
+    const d = await api('/api/admin/records', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    records.push(d.record);
+    closeModal('modal-quick-mark');
+    renderCalendar();
+  } catch(e) {
+    errEl.textContent = e.message || '新增失敗';
+    errEl.style.display = 'block';
+  }
+}
+  
 // ═══ CATEGORY MANAGEMENT MODAL ═══
 function openCategoryModal(){
   document.getElementById('category-err').style.display='none';
@@ -1388,7 +1467,7 @@ function renderCalendar(){
     const dotsHtml=hasRecord
       ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${CAL_CAT_COLORS[cat]||CAL_CAT_COLORS.default}"></span>`).join('')}</div>`
       :'';
-    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${dotsHtml}</div>`;
+    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}');openQuickMarkModal('${key}')">${d}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
