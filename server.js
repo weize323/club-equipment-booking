@@ -621,6 +621,33 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories||[]});
     }
 
+// Admin Create Record / Quick Marker
+  if(p==='/api/admin/records'&&m==='POST'){
+    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
+    const b=await bodyJSON(req);
+    const db=readDB();
+    const id='rec_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+    const newRecord={
+      id,
+      name: b.name || '[標記]',
+      sid: b.sid || 'ADMIN',
+      dept: b.dept || '',
+      phone: b.phone || '',
+      email: b.email || '',
+      cat: b.cat || 'task',
+      items: b.items || [],
+      equipment: b.equipment || [],
+      startDate: b.startDate,
+      endDate: b.endDate,
+      note: b.note || '',
+      status: b.status || 'approved',
+      createdAt: new Date().toISOString()
+    };
+    db.records.push(newRecord);
+    writeDB(db);
+    return json(res,200,{ok:true,record:newRecord});
+  }
+    
 // Admin Categories CRUD
   if(p==='/api/admin/categories'&&m==='POST'){
     if(!isAdmin(req)) return json(res,401,{error:'未登入'});
