@@ -173,7 +173,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 </div>
 
 <!-- 快速日期標記 Modal -->
-<div class="modal-backdrop" id="modal-quick-mark" style="display:none">
+<div class="modal-bg" id="modal-quick-mark">
   <div class="modal" style="max-width:380px;">
     <div class="modal-header">
       <h3 style="margin:0;font-size:1.1rem;" id="quick-mark-title">新增日期標記</h3>
@@ -871,8 +871,15 @@ function openQuickMarkModal(dateStr){
   document.getElementById('quick-mark-note').value = '';
   document.getElementById('quick-mark-err').style.display = 'none';
   
+  const list = (typeof categories !== 'undefined' && Array.isArray(categories) && categories.length)
+    ? categories
+    : [
+        {id:'personal', name:'個人借用'},
+        {id:'task', name:'社內任務'},
+        {id:'event', name:'成發拍攝'}
+      ];
   const catSel = document.getElementById('quick-mark-cat');
-  catSel.innerHTML = categories.map(c => `<option value="${c.id}">${c.name}${c.adminOnly ? ' (管理員限定)' : ''}</option>`).join('');
+  catSel.innerHTML = list.map(c => `<option value="${c.id}">${c.name}${c.adminOnly ? ' (管理員限定)' : ''}</option>`).join('');
   
   openModal('modal-quick-mark');
 }
