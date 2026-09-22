@@ -149,7 +149,7 @@ const DEFAULT_EMAIL={serviceId:'',templateId:'',pubKey:'',adminEmail:'',subject:
 const DEFAULT_LOCATIONS=['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER=['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
 const DEFAULT_CATEGORIES=[
-  {id:'personal',name:'個人借用',color:'#ec4899',adminOnly:false,builtin:true},
+  {id:'personal',name:'練習借用',color:'#ec4899',adminOnly:false,builtin:true},
   {id:'task',name:'社內任務',color:'#10b981',adminOnly:false,builtin:true},
   {id:'event',name:'成發拍攝',color:'#f59e0b',adminOnly:false,builtin:true}
 ];
