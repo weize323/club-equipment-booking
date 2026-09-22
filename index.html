@@ -89,7 +89,7 @@ input:focus,select:focus{border-color:#3b82f6}
       <label>借用類別 *</label>
       <select id="ub-cat" onchange="onUCatChange()">
         <option value="">選擇類別</option>
-        <option value="personal">個人借用</option>
+        <option value="personal">練習借用</option>
         <option value="event">成發拍攝</option>
         <option value="task">社內任務</option>
       </select>
@@ -158,7 +158,7 @@ input:focus,select:focus{border-color:#3b82f6}
     <div id="verify-section">
       <div class="verify-hero">
         <h3>🔐 身分驗證</h3>
-        <p>請輸入資訊以查詢個人借用紀錄</p>
+        <p>請輸入資訊以查詢借用紀錄</p>
       </div>
       <div class="card">
         <div class="grid-2">
@@ -208,7 +208,7 @@ const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
 function fmtDate(s){if(!s)return'';const d=new Date(s);return`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 function fmtDTL(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
-function catLabel(c){return{personal:'個人借用',event:'成發拍攝',task:'社內任務'}[c]||c}
+function catLabel(c){return{personal:'練習借用',event:'成發拍攝',task:'社內任務'}[c]||c}
 function computeStatus(r){
   if(r.status==='pending')return'pending';if(r.status==='done')return'done';
   const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
