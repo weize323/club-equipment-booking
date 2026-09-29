@@ -43,6 +43,10 @@ input:focus,select:focus{border-color:#3b82f6}
 .search-box:focus{border-color:#3b82f6}
 .avail-ok{color:#059669;font-size:11px}.avail-warn{color:#dc2626;font-size:11px}
 .conflict-warn{background:#fef9c3;border:1px solid #fde047;border-radius:7px;padding:8px;font-size:12px;color:#854d0e;display:none;margin-top:6px}
+.hint-box{background:#e0f2fe;border-radius:6px;padding:6px 9px;font-size:12px;color:#0369a1;margin-top:5px}
+.token-bar{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin-left:4px}
+.token{width:12px;height:12px;border-radius:50%;border:2px solid #d1d5db;background:#fff;display:inline-block}
+.token.filled{background:#f59e0b;border-color:#f59e0b}
 .info-row{display:flex;gap:6px;font-size:12px;margin-bottom:3px}
 .info-label{color:#94a3b8;min-width:56px;flex-shrink:0}
 .verify-hero{background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;border-radius:10px;padding:16px;margin-bottom:14px}
@@ -54,10 +58,6 @@ input:focus,select:focus{border-color:#3b82f6}
 .eq-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
 .dot-available{background:#10b981}.dot-inuse{background:#f59e0b}
 .dot-repairing{background:#ef4444}.dot-lost,.dot-disabled{background:#d1d5db}
-.hint-box{background:#e0f2fe;border-radius:6px;padding:6px 9px;font-size:12px;color:#0369a1;margin-top:5px}
-.token-bar{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin-left:4px}
-.token{width:12px;height:12px;border-radius:50%;border:2px solid #d1d5db;background:#fff;display:inline-block}
-.token.filled{background:#f59e0b;border-color:#f59e0b}
 </style>
 </head>
 <body>
@@ -77,11 +77,11 @@ input:focus,select:focus{border-color:#3b82f6}
       <div class="card-title">借用人資訊</div>
       <div class="grid-2">
         <div><label>姓名 *</label><input type="text" id="ub-name" placeholder="輸入姓名"></div>
-        <div><label>系級 *</label><input type="text" id="ub-dept" placeholder="例：企管二乙"></div>
+        <div><label>系級 *</label><input type="text" id="ub-dept" placeholder="例：行銷三乙"></div>
       </div>
       <div id="ub-member-hint" style="display:none"><div id="ub-member-info-box"></div></div>
       <div class="grid-2">
-        <div><label>學號 *</label><input type="text" id="ub-sid" placeholder="例：D1234567"></div>
+        <div><label>學號 *</label><input type="text" id="ub-sid" placeholder="例：D1345026"></div>
         <div><label>電話 *</label><input type="tel" id="ub-phone" placeholder="0912345678"></div>
       </div>
       <label>Gmail *</label><input type="email" id="ub-email" placeholder="abc@gmail.com">
@@ -89,14 +89,14 @@ input:focus,select:focus{border-color:#3b82f6}
       <label>借用類別 *</label>
       <select id="ub-cat" onchange="onUCatChange()">
         <option value="">選擇類別</option>
-        <option value="personal">練習借用</option>
+        <option value="personal">個人借用</option>
         <option value="event">成發拍攝</option>
         <option value="task">社內任務</option>
       </select>
       <div class="err" id="ub-err-cat">請選擇借用類別</div>
-      <div id="ub-task-name-wrap" style="display:none">
-        <label>任務名稱 *</label>
-        <input type="text" id="ub-task-name" placeholder="例：115_08_23_什麼咚咚">
+      <div id="ub-task-name-wrap">
+        <label id="ub-task-name-label">用途說明</label>
+        <input type="text" id="ub-task-name" placeholder="例：115_08_23_什麼度冬東">
         <div class="err" id="ub-err-task-name">社內任務必須填寫任務名稱</div>
       </div>
       <div id="ub-collab-section" style="display:none;margin-top:10px">
@@ -158,7 +158,7 @@ input:focus,select:focus{border-color:#3b82f6}
     <div id="verify-section">
       <div class="verify-hero">
         <h3>🔐 身分驗證</h3>
-        <p>請輸入資訊以查詢借用紀錄</p>
+        <p>請輸入資訊以查詢個人借用紀錄</p>
       </div>
       <div class="card">
         <div class="grid-2">
@@ -202,18 +202,42 @@ async function cloudJson(url,opts={}){
 }
 
 // ═══ STATE (in-memory from server) ═══
-let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[];
+let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[],pubCategories=[];
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
 function fmtDate(s){if(!s)return'';const d=new Date(s);return`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
 function fmtDTL(d){return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
-function catLabel(c){return{personal:'練習借用',event:'成發拍攝',task:'社內任務'}[c]||c}
+// Category name/color now looked up dynamically from pubCategories (loaded from
+// server, already filtered to exclude adminOnly categories) instead of a hardcoded
+// 3-value object, so admin-created custom categories display correctly here too.
+function catLabel(c){const found=pubCategories.find(x=>x.id===c);return found?found.name:(c||'');}
+function catColor(c){const found=pubCategories.find(x=>x.id===c);return found?found.color:'#3b82f6';}
+function catBadgeHtml(c){
+  const color=catColor(c);
+  return `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${catLabel(c)}</span>`;
+}
+// Per-card individual return support — mirrors server.js/admin.html exactly, so a
+// record with some cards individually returned by an admin displays correctly here
+// too (this file has no return UI itself, only read-only status display).
+function itemReturnKeys(item){
+  const cards=(item.assignedCards||[]).filter(Boolean);
+  if(cards.length===0)return [`${item.id}__${item.qty}`];
+  const keys=cards.map(cn=>`${item.id}__card__${cn}`);
+  const unassignedQty=item.qty-cards.length;
+  if(unassignedQty>0)keys.push(`${item.id}__unassigned__${unassignedQty}`);
+  return keys;
+}
+function isItemFullyReturned(item,returnedItems){
+  const legacyKey=`${item.id}__${item.qty}`;
+  if(returnedItems.includes(legacyKey))return true;
+  return itemReturnKeys(item).every(k=>returnedItems.includes(k));
+}
 function computeStatus(r){
   if(r.status==='pending')return'pending';if(r.status==='done')return'done';
   const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
   const allItems=r.equipment||[],returned=r.returnedItems||[];
-  if(allItems.length&&allItems.every(e=>returned.includes(e.id+'__'+e.qty)))return'done';
+  if(allItems.length&&allItems.every(e=>isItemFullyReturned(e,returned)))return'done';
   const someRet=returned.length>0;
   if(now<start)return'future';if(now>end)return someRet?'partial':'overdue';
   return someRet?'partial':'active';
@@ -232,10 +256,23 @@ async function loadPublicState(){
   pubPlaceholders=d.placeholders||{};
   pubLocations=d.locations||[];
   pubCatOrder=d.catOrder||[];
+  // Server has already excluded adminOnly categories from this response — members
+  // never receive them at all, so there is nothing to hide client-side.
+  pubCategories=d.categories||[];
+  renderUCatDropdown();
   applyPlaceholders();
   setUDefaultTimes();
   renderUEqList();
   renderEqScheduleList('sch-search','sch-eq-list');
+}
+// Populates the borrow-category dropdown from pubCategories (server-filtered —
+// adminOnly categories were never sent here, so this list is already member-safe).
+function renderUCatDropdown(){
+  const sel=document.getElementById('ub-cat');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML=`<option value="">選擇類別</option>`+pubCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  if([...sel.options].some(o=>o.value===cur))sel.value=cur;
 }
 
 // Officer status is checked server-side per-person (POST /api/member/check-officer) —
@@ -316,13 +353,13 @@ function showResults(){
     document.getElementById('result-list').innerHTML=myRecs.map(r=>{
       const cs=computeStatus(r),returned=r.returnedItems||[];
       const eqHtml=(r.equipment||[]).map(e=>{
-        const key=e.id+'__'+e.qty,isRet=returned.includes(key);
+        const isRet=isItemFullyReturned(e,returned);
         const cards=(e.assignedCards||[]).filter(Boolean);
         return`<div style="font-size:12px;${isRet?'text-decoration:line-through;color:#94a3b8':''}">• ${e.name}×${e.qty}${cards.length?` <span class="card-chip">${cards.join(' ')}</span>`:''}${isRet?' <span style="color:#059669">✓已還</span>':''}</div>`;
       }).join('');
       return`<div class="rec-card">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-          <span class="badge badge-${r.cat}">${catLabel(r.cat)}</span>${statusBadge(cs)}
+          ${catBadgeHtml(r.cat)}${statusBadge(cs)}
           ${r.taskName?`<span style="font-size:11px;color:#374151;font-weight:500">${r.taskName}</span>`:''}
           <span style="font-size:11px;color:#94a3b8">${fmtDate(r.createdAt)}</span>
         </div>
@@ -347,7 +384,7 @@ function doLogout(){
 function getEqSchedules(eqId){
   return pubRecords.filter(r=>{
     const st=computeStatus(r);if(st==='done')return false;
-    return(r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
+    return(r.equipment||[]).some(x=>x.id===eqId&&!isItemFullyReturned(x,r.returnedItems||[]));
   });
 }
 function renderEqScheduleList(searchId,listId){
@@ -399,7 +436,8 @@ function setUDefaultTimes(){
 function onUCatChange(){
   uSelectedEq={};uAssignedCards={};
   const cat=document.getElementById('ub-cat').value;
-  document.getElementById('ub-task-name-wrap').style.display=cat==='task'?'block':'none';
+  // 用途/任務名稱欄位對所有類別都開放填寫；只有「社內任務」強制必填
+  document.getElementById('ub-task-name-label').textContent=cat==='task'?'任務名稱 *':'用途說明';
   document.getElementById('ub-collab-section').style.display=cat==='task'?'block':'none';
   renderUEqList();renderUSelected();
   if(cat)refreshOfficerStatus(); // ensure officer status is checked even if name/sid/phone were filled before selecting a category
@@ -418,8 +456,14 @@ function getUOccupied(eqId,start,end){
   }).reduce((sum,r)=>{
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return sum;
-    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return sum;
-    return sum+item.qty;
+    const returned=r.returnedItems||[];
+    if(isItemFullyReturned(item,returned))return sum;
+    const cards=(item.assignedCards||[]).filter(Boolean);
+    if(cards.length===0)return sum+item.qty;
+    const outstandingCards=cards.filter(cn=>!returned.includes(`${item.id}__card__${cn}`)).length;
+    const unassignedQty=Math.max(0,item.qty-cards.length);
+    const unassignedReturned=unassignedQty>0&&returned.includes(`${item.id}__unassigned__${unassignedQty}`);
+    return sum+outstandingCards+(unassignedReturned?0:unassignedQty);
   },0);
 }
 function getUAvail(eqId,start,end){
@@ -436,9 +480,14 @@ function getBusyCards(eqId,start,end){
     const st=computeStatus(r);if(st==='done'||st==='pending')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
-    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
-    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
+    const returned=r.returnedItems||[];
+    const wholeReturned=returned.includes(`${item.id}__${item.qty}`);
+    (item.assignedCards||[]).forEach(c=>{
+      if(!c)return;
+      if(wholeReturned||returned.includes(`${item.id}__card__${c}`))return;
+      busy.add(c);
+    });
   });
   return busy;
 }
@@ -586,7 +635,7 @@ async function submitUBorrow(){
   const phone=document.getElementById('ub-phone').value.trim();
   const email=document.getElementById('ub-email').value.trim();
   const cat=document.getElementById('ub-cat').value;
-  const taskName=cat==='task'?document.getElementById('ub-task-name').value.trim():'';
+  const taskName=document.getElementById('ub-task-name').value.trim();
   const start=document.getElementById('ub-start').value;
   const end=document.getElementById('ub-end').value;
   const note=document.getElementById('ub-note').value.trim();
@@ -623,7 +672,7 @@ async function submitUBorrow(){
     document.getElementById('ub-cat').value='';
     document.getElementById('ub-collab-list').innerHTML='';
     document.getElementById('ub-collab-section').style.display='none';
-    document.getElementById('ub-task-name-wrap').style.display='none';
+    document.getElementById('ub-task-name-label').textContent='用途說明';
     document.getElementById('ub-selected-card').style.display='none';
     document.getElementById('ub-eq-search').value='';
     document.getElementById('ub-conflict-warn').style.display='none';
