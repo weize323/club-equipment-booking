@@ -190,7 +190,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
   </div>
 </div>
-  
+
 <!-- Modal: 忘記密碼 -->
 <div class="modal-bg" id="modal-forgot">
   <div class="modal" style="width:400px">
@@ -272,8 +272,8 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
           <option value="task">社內任務</option>
         </select>
         <div class="err" id="err-cat">請選擇借用類別</div>
-        <div id="task-name-wrap" style="display:none">
-          <label>任務名稱 *</label>
+        <div id="task-name-wrap">
+          <label id="task-name-label">用途說明</label>
           <input type="text" id="b-task-name" placeholder="例：115_08_23_什麼度冬東">
           <div class="err" id="err-task-name">社內任務必須填寫任務名稱</div>
         </div>
@@ -343,7 +343,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <option value="partial">部分歸還</option><option value="overdue">逾期</option>
         <option value="done">已歸還</option>
       </select>
-            <select id="filter-cat" onchange="renderRecords()" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
+      <select id="filter-cat" onchange="renderRecords()" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
         <option value="all">全部類別</option><option value="personal">個人借用</option>
         <option value="event">成發拍攝</option><option value="task">社內任務</option>
       </select>
@@ -352,16 +352,16 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   </div>
   <div class="stat-grid" id="records-stats"></div>
   <div class="cal-widget">
-  <div class="cal-header">
-  <button type="button" class="cal-nav-btn" onclick="calChangeMonth(-1)">‹ 上個月</button>
-  <strong id="cal-month-label"></strong>
-  <div style="display:flex;gap:6px;align-items:center">
-    <button type="button" class="cal-nav-btn" onclick="openQuickMarkModal()">📌 快速標記</button>
-    <button type="button" class="cal-nav-btn" onclick="calChangeMonth(1)">下個月 ›</button>
-  </div>
-</div>
-  <div class="cal-grid" id="cal-grid"></div>
-      <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
+    <div class="cal-header">
+      <button type="button" class="cal-nav-btn" onclick="calChangeMonth(-1)">‹ 上個月</button>
+      <strong id="cal-month-label"></strong>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button type="button" class="cal-nav-btn" onclick="openQuickMarkModal()">📌 快速標記</button>
+        <button type="button" class="cal-nav-btn" onclick="calChangeMonth(1)">下個月 ›</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div id="cal-filter-info" style="display:none;margin-top:8px;font-size:12px;color:#374151">
       已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
       <button type="button" class="cal-clear-btn" onclick="calClearSelection()">顯示全部</button>
     </div>
@@ -496,7 +496,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <div><label>電話</label><input type="text" id="ph-phone"></div>
       </div>
       <label>Gmail</label><input type="text" id="ph-email">
-      <label>任務名稱</label><input type="text" id="ph-taskName">
+      <label>任務名稱 / 用途說明</label><input type="text" id="ph-taskName">
       <button class="btn btn-primary" onclick="savePlaceholders()" style="margin-top:12px">儲存提示文字</button>
       <div id="ph-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">已儲存 ✓</div>
     </div>
@@ -540,10 +540,17 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div id="setting-data" style="display:none">
     <div class="card" style="max-width:560px">
       <div class="card-title">資料管理</div>
-      <p class="text-muted" style="margin-bottom:12px">資料存於 Railway 伺服器，所有管理員共用同一份。匯出可備份完整資料。</p>
-      <div class="flex gap-6" style="flex-wrap:wrap">
+      <p class="text-muted" style="margin-bottom:12px">資料存於伺服器，所有管理員共用同一份。匯出可備份完整資料，匯入可還原或搬移備份檔案。</p>
+      <div class="flex gap-6" style="flex-wrap:wrap;margin-bottom:10px">
         <button class="btn" onclick="exportData()">📥 匯出 JSON</button>
+        <button class="btn btn-primary" onclick="document.getElementById('import-json-file').click()">📤 匯入 JSON</button>
+        <input type="file" id="import-json-file" accept=".json" style="display:none" onchange="handleImportJsonFile(this)">
       </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;margin:0;font-size:12px;color:#374151;cursor:pointer">
+        <input type="checkbox" id="import-overwrite-mode" style="width:auto;margin-top:2px">
+        <span>覆蓋模式（勾選後匯入會完全取代現有資料，不勾則是合併——只新增伺服器上沒有的項目，不覆蓋、不刪除現有資料）</span>
+      </label>
+      <div id="import-json-result" style="display:none;margin-top:10px;font-size:12px;padding:8px 10px;border-radius:7px"></div>
     </div>
     <div class="card" style="max-width:560px;border-color:#f59e0b;background:#fffbf0">
       <div class="card-title">📦 匯入舊版瀏覽器資料（localStorage → 伺服器）</div>
@@ -765,7 +772,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
           <option value="task">社內任務</option>
         </select>
         <div id="er-taskname-wrap">
-          <label>任務名稱 *</label><input type="text" id="er-taskname" placeholder="例：115_08_23_什麼度冬東">
+          <label id="er-taskname-label">用途說明</label><input type="text" id="er-taskname" placeholder="例：115_08_23_什麼度冬東">
         </div>
         <label>借出時間 *</label><input type="datetime-local" id="er-start">
         <label>預計歸還時間 *</label><input type="datetime-local" id="er-end">
@@ -860,46 +867,6 @@ function renderCatDropdowns(){
   }
 }
 
-async function submitQuickMark(){
-  const dateStr = document.getElementById('quick-mark-date').value;
-  const cat = document.getElementById('quick-mark-cat').value;
-  const note = document.getElementById('quick-mark-note').value.trim();
-  const errEl = document.getElementById('quick-mark-err');
-  
-  if(!cat){
-    errEl.textContent = '請選擇類別';
-    errEl.style.display = 'block';
-    return;
-  }
-  
-  const payload = {
-    name: note ? `[標記] ${note}` : '[純標記]',
-    sid: 'ADMIN-MARK',
-    dept: '管理標記',
-    phone: '0000000000',
-    email: 'admin@system.local',
-    cat: cat,
-    items: [],
-    startDate: `${dateStr} 00:00`,
-    endDate: `${dateStr} 23:59`,
-    note: note,
-    status: 'approved'
-  };
-
-  try {
-    const d = await api('/api/admin/records', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    records.push(d.record);
-    closeModal('modal-quick-mark');
-    renderCalendar();
-  } catch(e) {
-    errEl.textContent = e.message || '新增失敗';
-    errEl.style.display = 'block';
-  }
-}
-  
 // ═══ CATEGORY MANAGEMENT MODAL ═══
 function openCategoryModal(){
   document.getElementById('category-err').style.display='none';
@@ -980,6 +947,7 @@ async function deleteCategory(id){
 // ═══ CALENDAR QUICK MARK (pure note/tag, no equipment, no reviewer step) ═══
 function openQuickMarkModal(){
   const dateEl=document.getElementById('quick-mark-date');
+  // Pre-fill with the currently-selected calendar date if one is active, else today.
   dateEl.value=calSelectedDate||calDateKey(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
   const catSel=document.getElementById('quick-mark-cat');
   catSel.innerHTML=categories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
@@ -1009,16 +977,33 @@ async function submitQuickMark(){
     errEl.style.display='block';
   }
 }
-  
+
 function eqStatusLabel(s){return{available:'可借用',inuse:'借出中',repairing:'維修中',lost:'遺失',disabled:'停用'}[s]||'可借用';}
 function eqStatusDotClass(s){return{available:'dot-available',inuse:'dot-inuse',repairing:'dot-repairing',lost:'dot-lost',disabled:'dot-disabled'}[s]||'dot-available';}
 
+// Per-card individual return support — mirrors server.js exactly.
+// Non-card items keep the original single whole-item key (`${id}__${qty}`), fully
+// backward compatible. Card items get one key PER CARD, so each physical card can be
+// returned independently.
+function itemReturnKeys(item){
+  const cards=(item.assignedCards||[]).filter(Boolean);
+  if(cards.length===0)return [`${item.id}__${item.qty}`];
+  const keys=cards.map(cn=>`${item.id}__card__${cn}`);
+  const unassignedQty=item.qty-cards.length;
+  if(unassignedQty>0)keys.push(`${item.id}__unassigned__${unassignedQty}`);
+  return keys;
+}
+function isItemFullyReturned(item,returnedItems){
+  const legacyKey=`${item.id}__${item.qty}`;
+  if(returnedItems.includes(legacyKey))return true;
+  return itemReturnKeys(item).every(k=>returnedItems.includes(k));
+}
 function computeStatus(r){
   if(r.status==='pending')return'pending';
   if(r.status==='done')return'done';
   const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
   const allItems=r.equipment||[],returned=r.returnedItems||[];
-  if(allItems.length&&allItems.every(e=>returned.includes(e.id+'__'+e.qty)))return'done';
+  if(allItems.length&&allItems.every(e=>isItemFullyReturned(e,returned)))return'done';
   const someRet=returned.length>0;
   if(now<start)return'future';if(now>end)return someRet?'partial':'overdue';
   return someRet?'partial':'active';
@@ -1111,8 +1096,14 @@ function getOccupied(eqId,start,end,excludeId){
   }).reduce((sum,r)=>{
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return sum;
-    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return sum;
-    return sum+item.qty;
+    const returned=r.returnedItems||[];
+    if(isItemFullyReturned(item,returned))return sum;
+    const cards=(item.assignedCards||[]).filter(Boolean);
+    if(cards.length===0)return sum+item.qty;
+    const outstandingCards=cards.filter(cn=>!returned.includes(`${item.id}__card__${cn}`)).length;
+    const unassignedQty=Math.max(0,item.qty-cards.length);
+    const unassignedReturned=unassignedQty>0&&returned.includes(`${item.id}__unassigned__${unassignedQty}`);
+    return sum+outstandingCards+(unassignedReturned?0:unassignedQty);
   },0);
 }
 function getAvail(eqId,start,end,excludeId){
@@ -1132,9 +1123,14 @@ function getBusyCards(eqId,start,end,excludeId){
     const st=computeStatus(r);if(st==='done'||st==='pending')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
-    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
-    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
+    const returned=r.returnedItems||[];
+    const wholeItemReturned=returned.includes(`${item.id}__${item.qty}`);
+    (item.assignedCards||[]).forEach(c=>{
+      if(!c)return;
+      if(wholeItemReturned||returned.includes(`${item.id}__card__${c}`))return;
+      busy.add(c);
+    });
   });
   return busy;
 }
@@ -1157,7 +1153,8 @@ function onTimeChange(){
 function onCatChange(){
   selectedEq={};assignedCards={};
   const cat=document.getElementById('b-cat').value;
-  document.getElementById('task-name-wrap').style.display=cat==='task'?'block':'none';
+  // 用途/任務名稱欄位對所有類別都開放填寫；只有「社內任務」強制必填（label 加星號、送出時檢查）
+  document.getElementById('task-name-label').textContent=cat==='task'?'任務名稱 *':'用途說明';
   document.getElementById('collab-section').style.display=cat==='task'?'block':'none';
   renderEqList();renderSelected();
 }
@@ -1284,7 +1281,7 @@ function openEqSchedule(eqId){
   document.getElementById('eq-sch-title').textContent=(e?e.name:'器材')+' 借用時段';
   const relevant=records.filter(r=>{
     const st=computeStatus(r);if(st==='done')return false;
-    return(r.equipment||[]).some(x=>x.id===eqId&&!(r.returnedItems||[]).includes(x.id+'__'+x.qty));
+    return(r.equipment||[]).some(x=>x.id===eqId&&!isItemFullyReturned(x,r.returnedItems||[]));
   });
   document.getElementById('eq-sch-body').innerHTML=!relevant.length?'<p style="color:#9ca3af;padding:12px 0">目前無借用紀錄</p>':
     relevant.map(r=>{
@@ -1336,7 +1333,7 @@ async function submitBorrow(){
   const phone=document.getElementById('b-phone').value.trim();
   const email=document.getElementById('b-email').value.trim();
   const cat=document.getElementById('b-cat').value;
-  const taskName=cat==='task'?document.getElementById('b-task-name').value.trim():'';
+  const taskName=document.getElementById('b-task-name').value.trim();
   const start=document.getElementById('b-start').value,end=document.getElementById('b-end').value;
   const note=document.getElementById('b-note').value.trim();
   const collabs=getCollabMembers();
@@ -1368,7 +1365,7 @@ async function submitBorrow(){
     document.getElementById('eq-search').value='';
     document.getElementById('collab-list').innerHTML='';
     document.getElementById('collab-section').style.display='none';
-    document.getElementById('task-name-wrap').style.display='none';
+    document.getElementById('task-name-label').textContent='用途說明';
     document.getElementById('conflict-banner').style.display='none';
     document.getElementById('time-reminder').style.display='block';
     setDefaultTimes();renderEqList();renderSelected();
@@ -1483,7 +1480,7 @@ function renderCalendar(){
     const dotsHtml=hasRecord
       ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${CAL_CAT_COLORS[cat]||CAL_CAT_COLORS.default}"></span>`).join('')}</div>`
       :'';
-    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}');openQuickMarkModal()">${d}${dotsHtml}</div>`;
+    html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${dotsHtml}</div>`;
   }
   document.getElementById('cal-grid').innerHTML=html;
 }
@@ -1528,6 +1525,7 @@ function renderRecords(){
   if(cf!=='all')filtered=filtered.filter(r=>r.cat===cf);
   if(q)filtered=filtered.filter(r=>r.name.toLowerCase().includes(q)||(r.sid||'').toLowerCase().includes(q)||(r.taskName||'').toLowerCase().includes(q));
   if(calSelectedDate)filtered=filtered.filter(r=>calRecordCoversDate(r,calSelectedDate));
+
   const counts={pending:0,future:0,active:0,partial:0,overdue:0,done:0};
   computed.forEach(r=>{if(counts[r.cs]!=null)counts[r.cs]++;});
   document.getElementById('records-stats').innerHTML=[
@@ -1555,7 +1553,7 @@ function renderRecords(){
     }
     const returned=r.returnedItems||[];
     const eqHtml=(r.equipment||[]).map(e=>{
-      const key=e.id+'__'+e.qty,isRet=returned.includes(key);
+      const isRet=isItemFullyReturned(e,returned);
       const cards=(e.assignedCards||[]).filter(Boolean);
       const cardStr=cards.length?` <span class="card-chip">${cards.join(' ')}</span>`:'';
       // Show assign-card button for equipment that has cardNumbers defined
@@ -1739,15 +1737,45 @@ function openReturn(id){
   const r=records.find(x=>x.id===id),returned=r.returnedItems||[];
   document.getElementById('return-info').innerHTML=`<strong>${r.name}</strong>（${r.dept||''}）${r.taskName?` ／ ${r.taskName}`:''}<br>借出 ${fmtDate(r.start)}　預計歸還 ${fmtDate(r.end)}`;
   document.getElementById('eq-return-list').innerHTML=(r.equipment||[]).map(e=>{
-    const key=e.id+'__'+e.qty,isRet=returned.includes(key);
     const cards=(e.assignedCards||[]).filter(Boolean);
-    return`<div class="eq-return-item">
-      <label style="margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:${isRet?'#9ca3af':'#374151'}">
-        <input type="checkbox" id="ret-${e.id}" ${isRet?'checked disabled':''} style="width:auto">
-        ${e.name}×${e.qty}${cards.length?` <span class="card-chip">${cards.join(' ')}</span>`:''}
-      </label>
-      ${isRet?'<span style="font-size:11px;color:#059669">已歸還</span>':'<span style="font-size:11px;color:#9ca3af">未還</span>'}
-    </div>`;
+    const legacyKey=`${e.id}__${e.qty}`;
+    const wholeReturned=returned.includes(legacyKey);
+    if(cards.length===0){
+      // No cards — unchanged, single checkbox for the whole line item
+      const isRet=wholeReturned;
+      return`<div class="eq-return-item">
+        <label style="margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:${isRet?'#9ca3af':'#374151'}">
+          <input type="checkbox" data-kind="whole" data-eqid="${e.id}" data-qty="${e.qty}" ${isRet?'checked disabled':''} style="width:auto">
+          ${e.name}×${e.qty}
+        </label>
+        ${isRet?'<span style="font-size:11px;color:#059669">已歸還</span>':'<span style="font-size:11px;color:#9ca3af">未還</span>'}
+      </div>`;
+    }
+    // Has memory cards: one checkbox PER CARD so each physical card can be returned
+    // independently, plus one extra row for any unassigned remainder of qty.
+    const unassignedQty=e.qty-cards.length;
+    const cardRows=cards.map(cn=>{
+      const isRet=wholeReturned||returned.includes(`${e.id}__card__${cn}`);
+      return`<div class="eq-return-item" style="padding-left:18px">
+        <label style="margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:${isRet?'#9ca3af':'#374151'}">
+          <input type="checkbox" data-kind="card" data-eqid="${e.id}" data-card="${cn}" ${isRet?'checked disabled':''} style="width:auto">
+          ${e.name} <span class="card-chip">${cn}</span>
+        </label>
+        ${isRet?'<span style="font-size:11px;color:#059669">已歸還</span>':'<span style="font-size:11px;color:#9ca3af">未還</span>'}
+      </div>`;
+    }).join('');
+    let unassignedRow='';
+    if(unassignedQty>0){
+      const isRet=wholeReturned||returned.includes(`${e.id}__unassigned__${unassignedQty}`);
+      unassignedRow=`<div class="eq-return-item" style="padding-left:18px">
+        <label style="margin:0;display:flex;align-items:center;gap:7px;font-size:13px;color:${isRet?'#9ca3af':'#374151'}">
+          <input type="checkbox" data-kind="unassigned" data-eqid="${e.id}" data-qty="${unassignedQty}" ${isRet?'checked disabled':''} style="width:auto">
+          ${e.name}（未指定卡號，共 ${unassignedQty} 台）
+        </label>
+        ${isRet?'<span style="font-size:11px;color:#059669">已歸還</span>':'<span style="font-size:11px;color:#9ca3af">未還</span>'}
+      </div>`;
+    }
+    return`<div style="margin-bottom:6px"><div style="font-size:12px;font-weight:600;color:#6b7280;padding:4px 0">${e.name}×${e.qty}</div>${cardRows}${unassignedRow}</div>`;
   }).join('');
   document.getElementById('return-note').value='';
   openModal('modal-return');
@@ -1759,9 +1787,18 @@ async function confirmReturn(all){
   if(all){
     body={all:true,note};
   }else{
-    const checked=(r.equipment||[]).filter(e=>document.getElementById('ret-'+e.id)?.checked&&!(r.returnedItems||[]).includes(e.id+'__'+e.qty));
-    if(!checked.length){alert('請勾選尚未歸還的器材');return;}
-    body={all:false,returnedKeys:checked.map(e=>e.id+'__'+e.qty),note};
+    // Read every checked, non-disabled checkbox and derive its return key from its
+    // data-kind attribute — uniformly covers whole-item, per-card, and unassigned-
+    // remainder checkboxes without needing separate collection logic for each.
+    const boxes=[...document.querySelectorAll('#eq-return-list input[type="checkbox"]')].filter(cb=>cb.checked&&!cb.disabled);
+    if(!boxes.length){alert('請勾選尚未歸還的器材');return;}
+    const returnedKeys=boxes.map(cb=>{
+      const kind=cb.dataset.kind;
+      if(kind==='card')return `${cb.dataset.eqid}__card__${cb.dataset.card}`;
+      if(kind==='unassigned')return `${cb.dataset.eqid}__unassigned__${cb.dataset.qty}`;
+      return `${cb.dataset.eqid}__${cb.dataset.qty}`;
+    });
+    body={all:false,returnedKeys,note};
   }
   try{
     const d=await api(`/api/admin/records/${returnTargetId}/return`,{method:'POST',body:JSON.stringify(body)});
@@ -2309,6 +2346,35 @@ async function exportData(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='器材借用_'+new Date().toLocaleDateString('zh-TW').replace(/\//g,'-')+'.json';a.click();
 }
+// Import a previously-exported backup JSON file directly through the UI — reuses the
+// existing /api/admin/import-legacy endpoint (the same one the old localStorage-import
+// and our manual DevTools workaround both used), so the server-side merge/overwrite
+// safety logic is identical either way.
+async function handleImportJsonFile(input){
+  const file=input.files[0];
+  if(!file)return;
+  const resultEl=document.getElementById('import-json-result');
+  const overwrite=document.getElementById('import-overwrite-mode').checked;
+  resultEl.style.display='none';
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    if(overwrite&&!confirm('覆蓋模式會完全取代現有資料，且無法復原，確定要繼續嗎？'))
+    {input.value='';return;}
+    const d=await api('/api/admin/import-legacy',{
+      method:'POST',
+      body:JSON.stringify({mode:overwrite?'overwrite':'merge',...data})
+    });
+    resultEl.style.background='#f0fdf4';resultEl.style.color='#166534';resultEl.style.display='block';
+    resultEl.textContent=`✓ 匯入成功！records:${d.totals?.records??'-'}　members:${d.totals?.members??'-'}　equipment:${d.totals?.equipment??'-'}（頁面資料即將自動重新整理）`;
+    setTimeout(()=>location.reload(),1800);
+  }catch(e){
+    resultEl.style.background='#fef2f2';resultEl.style.color='#dc2626';resultEl.style.display='block';
+    resultEl.textContent='✗ 匯入失敗：'+(e.message||'檔案格式錯誤或無法解析');
+  }finally{
+    input.value='';
+  }
+}
 
 // ═══ MODAL ═══
 function openModal(id){document.getElementById(id).classList.add('open');}
@@ -2721,9 +2787,9 @@ function openEditRecord(id){
   document.getElementById('er-email').value=r.email||'';
   document.getElementById('er-cat').value=r.cat||'personal';
   document.getElementById('er-taskname').value=r.taskName||'';
-  document.getElementById('er-taskname-wrap').style.display=r.cat==='task'?'block':'none';
+  document.getElementById('er-taskname-label').textContent=r.cat==='task'?'任務名稱 *':'用途說明';
   document.getElementById('er-cat').onchange=function(){
-    document.getElementById('er-taskname-wrap').style.display=this.value==='task'?'block':'none';
+    document.getElementById('er-taskname-label').textContent=this.value==='task'?'任務名稱 *':'用途說明';
   };
   document.getElementById('er-start').value=fmtDTLfromISO(r.start);
   document.getElementById('er-end').value=fmtDTLfromISO(r.end);
@@ -2739,8 +2805,7 @@ function erRenderEqList(r){
   const returned=r.returnedItems||[];
   const el=document.getElementById('er-eq-list');
   el.innerHTML=(r.equipment||[]).map((e,idx)=>{
-    const key=e.id+'__'+e.qty;
-    const isRet=returned.includes(key);
+    const isRet=isItemFullyReturned(e,returned);
     const eqDef=equipment.find(x=>x.id===e.id);
     const hasCards=eqDef&&(eqDef.cards||[]).length>0;
     const cards=(e.assignedCards||[]).filter(Boolean);
