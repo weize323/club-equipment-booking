@@ -147,6 +147,7 @@ const DEFAULT_EQ = [
 const DEFAULT_PH={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東',note:'',collabName:'姓名',collabSid:'學號',eqSearch:'搜尋器材名稱...',vName:'輸入姓名',vSid:'輸入學號',vPhone:'輸入電話',redeemNotice:''};
 const DEFAULT_EMAIL={serviceId:'',templateId:'',pubKey:'',adminEmail:'',subject:'【器材借用】您的申請已通過審核',body:'親愛的 {{to_name}} 同學您好，\n\n您的借用申請已通過審核！\n\n器材：{{borrow_items}}\n借出：{{borrow_start}}\n歸還：{{borrow_end}}\n\n如有問題請洽管理員。',notifySubject:'【器材借用通知】新的借用申請',notifyBody:'有新的借用申請需要審核。\n\n申請人：{{to_name}}\n系級：{{dept}}\n學號：{{sid}}\n電話：{{phone}}\n申請人Email：{{email}}\n\n任務名稱：{{taskName}}\n\n借用日期：{{borrow_start}}\n歸還日期：{{borrow_end}}\n\n申請器材：\n{{borrow_items}}\n\n請至管理員後台查看並審核。',notifyTemplateId:'',resetTemplateId:'',approveTemplateId:''};
 const DEFAULT_LOCATIONS=['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
+//EQHELPER
 const DEFAULT_CAT_ORDER=['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
 // Borrow categories (personal/task/event etc.) — NOT to be confused with DEFAULT_CAT_ORDER
 // above, which orders EQUIPMENT TYPES (相機/鏡頭/...). This is the admin-manageable list
@@ -171,7 +172,7 @@ function initialDB(){
   return {version:4,password:makePw(process.env.ADMIN_PASSWORD||'admin123'),
     records:[],members:[],equipment:DEFAULT_EQ,
     emailSettings:DEFAULT_EMAIL,placeholders:DEFAULT_PH,
-    locations:DEFAULT_LOCATIONS,catOrder:DEFAULT_CAT_ORDER,
+    locations:DEFAULT_LOCATIONS,catOrder:DEFAULT_CAT_ORDER,eqTypes:[...DEFAULT_CAT_ORDER],
     categories:DEFAULT_CATEGORIES,
     resetTokens:{}};
 }
@@ -280,6 +281,7 @@ function writeDB(d){
   fs.renameSync(tmp,DB_FILE); // atomic — data.json is only ever replaced in one step
 }
 
+function ensureEqTypes(){ if(!db.eqTypes) db.eqTypes=[...new Set([...DEFAULT_CAT_ORDER,...(db.catOrder||[]),...(db.equipment||[]).map(e=>e.type).filter(Boolean)])]; }
 let db=readDB();
 
 // ── Sessions ──
@@ -679,6 +681,7 @@ const server=http.createServer(async(req,res)=>{
     // ── Admin full state ──
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      ensureEqTypes();
       return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes});
     }
 
@@ -702,6 +705,7 @@ const server=http.createServer(async(req,res)=>{
     // 記憶卡 is excluded: its per-card logic is keyed on that exact name.
     if(m==='POST'&&p==='/api/admin/equipment-types/rename'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      ensureEqTypes();
       const b=await bodyJSON(req);
       const from=String(b.from||'').trim(),to=String(b.to||'').trim();
       if(!from||!to)return json(res,400,{error:'請輸入分類名稱'});
@@ -717,6 +721,36 @@ const server=http.createServer(async(req,res)=>{
       if(!db.eqTypes.includes(to))db.eqTypes.push(to);
       writeDB(db);
       return json(res,200,{ok:true,equipment:db.equipment,catOrder:db.catOrder,eqTypes:db.eqTypes});
+    }
+
+    // ── Admin: add an equipment type ──
+    if(m==='POST'&&p==='/api/admin/equipment-types'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      ensureEqTypes();
+      const b=await bodyJSON(req);
+      const name=String(b.name||'').trim();
+      if(!name)return json(res,400,{error:'請輸入分類名稱'});
+      if(name.length>20)return json(res,400,{error:'分類名稱最多 20 字'});
+      const types=new Set([...(db.eqTypes||[]),...(db.catOrder||[]),...db.equipment.map(e=>e.type)]);
+      if(types.has(name))return json(res,409,{error:`分類「${name}」已存在`});
+      if(!db.eqTypes)db.eqTypes=[];
+      db.eqTypes.push(name);
+      writeDB(db);
+      return json(res,200,{ok:true,eqTypes:db.eqTypes});
+    }
+
+    // ── Admin: delete an equipment type (blocked while any equipment uses it) ──
+    if(m==='DELETE'&&p.startsWith('/api/admin/equipment-types/')){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      ensureEqTypes();
+      const name=decodeURIComponent(p.slice('/api/admin/equipment-types/'.length));
+      if(name==='記憶卡')return json(res,400,{error:'「記憶卡」為系統內建分類，不可刪除'});
+      const using=db.equipment.filter(e=>e.type===name).length;
+      if(using>0)return json(res,409,{error:`目前有 ${using} 項器材使用此分類，請先移到其他分類或刪除器材`});
+      db.eqTypes=(db.eqTypes||[]).filter(t=>t!==name);
+      db.catOrder=(db.catOrder||[]).filter(t=>t!==name);
+      writeDB(db);
+      return json(res,200,{ok:true,eqTypes:db.eqTypes,catOrder:db.catOrder});
     }
 
     // ── Admin reorder records (ids only; never adds/removes/edits a record) ──

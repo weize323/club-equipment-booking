@@ -166,6 +166,22 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   </div>
 </div>
 
+<!-- Modal: 器材分類管理 -->
+<div class="modal-bg" id="modal-eq-types">
+  <div class="modal" style="width:520px">
+    <h3>⚙️ 管理器材分類</h3>
+    <p class="text-muted" style="margin-bottom:10px">可改名、新增、刪除分類。分類下還有器材時不能刪除；「記憶卡」為系統內建，不可改名或刪除。順序請在器材列表拖曳分類標題列調整。</p>
+    <div id="eq-type-list"></div>
+    <hr>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <input type="text" id="new-eq-type" maxlength="20" placeholder="新分類名稱，例：燈光" style="flex:1">
+      <button type="button" class="btn btn-primary btn-sm" onclick="addEqType()">+ 新增分類</button>
+    </div>
+    <div class="err" id="eq-type-err" style="display:none;margin-top:8px"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal('modal-eq-types')">關閉</button></div>
+  </div>
+</div>
+
 <!-- Modal: 日曆快速標記（純備忘標籤，無器材、無借用人，免審核） -->
 <div class="modal-bg" id="modal-quick-mark">
   <div class="modal" style="width:420px">
@@ -399,7 +415,10 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 <div class="page" id="page-equipment">
   <div class="section-header">
     <h2>器材管理</h2>
-    <button class="btn btn-primary" onclick="openAddEq()">+ 新增器材</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="openEqTypeModal()">⚙️ 管理器材分類</button>
+      <button class="btn btn-primary" onclick="openAddEq()">+ 新增器材</button>
+    </div>
   </div>
   <div class="card" style="margin-bottom:10px">
     <p class="text-muted">☰ 拖曳<strong>類別標題行</strong>可調整類別順序；拖曳器材行可在同類別內排序。欄位：狀態・位置・財產歸屬・備註・卡號</p>
@@ -1201,6 +1220,59 @@ function renderEqTypeTabs(){
   if(eqFilter!=='all'&&!types.includes(eqFilter))eqFilter='all';
   box.innerHTML=`<button class="cat-tab ${eqFilter==='all'?'active':''}" onclick="filterEqCat('all',this)">全部</button>`+
     types.map(t=>`<button class="cat-tab ${eqFilter===t?'active':''}" data-type="${t}" onclick="filterEqCat(this.dataset.type,this)">${t}</button>`).join('');
+}
+function openEqTypeModal(){
+  document.getElementById('eq-type-err').style.display='none';
+  document.getElementById('new-eq-type').value='';
+  renderEqTypeList();openModal('modal-eq-types');
+}
+function eqTypeErr(msg){const el=document.getElementById('eq-type-err');el.textContent=msg;el.style.display=msg?'block':'none';}
+function renderEqTypeList(){
+  const list=allEqTypes();
+  document.getElementById('eq-type-list').innerHTML=list.map((t,i)=>{
+    const n=equipment.filter(e=>e.type===t).length;
+    const locked=t==='記憶卡';
+    return `<div class="category-row">
+      <input type="text" id="eqt-name-${i}" value="${t.replace(/"/g,'&quot;')}" maxlength="20" ${locked?'readonly':''}>
+      <span class="text-muted" style="font-size:11px;white-space:nowrap">${n} 項</span>
+      ${locked?'<span class="badge-builtin">內建</span>':`<button type="button" class="btn btn-sm" data-i="${i}" data-type="${t.replace(/"/g,'&quot;')}" onclick="saveEqTypeRow(this)">儲存</button>
+      <button type="button" class="btn btn-sm btn-danger" data-type="${t.replace(/"/g,'&quot;')}" onclick="deleteEqType(this.dataset.type)">刪除</button>`}
+    </div>`;}).join('');
+}
+async function saveEqTypeRow(btn){
+  const from=btn.dataset.type,to=document.getElementById('eqt-name-'+btn.dataset.i).value.trim();
+  eqTypeErr('');
+  if(!to){eqTypeErr('請輸入分類名稱');return;}
+  if(to===from)return;
+  try{
+    const d=await api('/api/admin/equipment-types/rename',{method:'POST',body:JSON.stringify({from,to})});
+    equipment=d.equipment||equipment;catOrder=d.catOrder||catOrder;eqTypes=d.eqTypes||eqTypes;
+    if(eqFilter===from)eqFilter=to;
+    afterEqTypeChange();
+  }catch(e){eqTypeErr(e.message);}
+}
+async function addEqType(){
+  const name=document.getElementById('new-eq-type').value.trim();
+  eqTypeErr('');
+  if(!name){eqTypeErr('請輸入分類名稱');return;}
+  try{
+    const d=await api('/api/admin/equipment-types',{method:'POST',body:JSON.stringify({name})});
+    eqTypes=d.eqTypes||eqTypes;
+    document.getElementById('new-eq-type').value='';
+    afterEqTypeChange();
+  }catch(e){eqTypeErr(e.message);}
+}
+async function deleteEqType(name){
+  if(!confirm(`確定刪除分類「${name}」？`))return;
+  eqTypeErr('');
+  try{
+    const d=await api('/api/admin/equipment-types/'+encodeURIComponent(name),{method:'DELETE'});
+    eqTypes=d.eqTypes||eqTypes;catOrder=d.catOrder||catOrder;
+    afterEqTypeChange();
+  }catch(e){eqTypeErr(e.message);}
+}
+function afterEqTypeChange(){
+  renderEqTypeList();renderEqTypeOptions();renderEqTypeTabs();renderEquipment();renderEqList();
 }
 async function renameEqType(from){
   if(from==='記憶卡'){alert('「記憶卡」分類有逐張卡號管理功能，名稱不可更改。');return;}
