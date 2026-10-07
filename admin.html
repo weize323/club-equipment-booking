@@ -390,8 +390,17 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     <div id="members-empty" style="text-align:center;padding:28px;color:#d1d5db;display:none">尚無社員資料</div>
   </div>
   <div class="card mt-12 highlight">
-    <div class="card-title">任務兌換說明</div>
-    <p class="text-sm" style="color:#555">完成 <strong>3 場<span data-catname="task">社內任務</span></strong>可兌換 1 次<span data-catname="personal">個人借用</span>資格，兌換後扣除 3 場。</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div class="card-title" style="margin:0">任務兌換說明</div>
+      <button type="button" class="btn btn-sm" onclick="toggleRedeemEdit(true)" id="redeem-edit-btn">✏️ 編輯說明</button>
+    </div>
+    <p class="text-sm" id="redeem-notice-text" style="color:#555;margin-top:8px;white-space:pre-wrap"></p>
+    <div id="redeem-edit-box" style="display:none;margin-top:8px">
+      <textarea id="redeem-notice-input" rows="3" style="resize:vertical" placeholder="留空＝使用預設說明"></textarea>
+      <p class="text-muted" style="margin:4px 0 8px">這段文字會顯示在這裡，也會在借用端選到「個人借用」類別時顯示給借用人。留空儲存＝恢復預設。</p>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveRedeemNotice()">儲存</button>
+      <button type="button" class="btn btn-sm" onclick="toggleRedeemEdit(false)">取消</button>
+    </div>
   </div>
 </div>
 
@@ -836,6 +845,7 @@ function renderCatDropdowns(){
     if([...erCat.options].some(o=>o.value===cur))erCat.value=cur;
   }
   document.querySelectorAll('[data-catname]').forEach(el=>{const c=categories.find(x=>x.id===el.dataset.catname);if(c)el.textContent=c.name;});
+  renderRedeemNotice();
   const filterCat=document.getElementById('filter-cat');
   if(filterCat){
     const cur=filterCat.value||'all';
@@ -1050,7 +1060,7 @@ async function loadAdminState(){
 }
 function initPage(){
   applyPlaceholders();setDefaultTimes();renderEqList();
-  loadEmailUI();loadPlaceholdersUI();renderLocationList();
+  loadEmailUI();loadPlaceholdersUI();renderRedeemNotice();renderLocationList();
 }
 
 // ═══ NAV ═══
@@ -1093,6 +1103,23 @@ async function loadPublicPlaceholders(){
   }catch(e){
     console.warn('loadPublicPlaceholders failed:',e);
   }
+}
+
+// ═══ 任務兌換說明 (editable; shown here and on the member form for the 個人借用 category) ═══
+function defaultRedeemNotice(){return `完成 3 場${catLabel('task')}可兌換 1 次${catLabel('personal')}資格，兌換後扣除 3 場。`;}
+function renderRedeemNotice(){
+  const el=document.getElementById('redeem-notice-text');
+  if(el)el.textContent=(placeholders.redeemNotice||'').trim()||defaultRedeemNotice();
+}
+function toggleRedeemEdit(on){
+  document.getElementById('redeem-edit-box').style.display=on?'block':'none';
+  document.getElementById('redeem-edit-btn').style.display=on?'none':'';
+  if(on)document.getElementById('redeem-notice-input').value=placeholders.redeemNotice||'';
+}
+async function saveRedeemNotice(){
+  placeholders.redeemNotice=document.getElementById('redeem-notice-input').value.trim();
+  try{await apiPut('placeholders',placeholders);}catch(e){alert('儲存失敗：'+e.message);return;}
+  renderRedeemNotice();toggleRedeemEdit(false);
 }
 
 // ═══ AVAILABILITY ═══
