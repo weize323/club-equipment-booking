@@ -120,12 +120,6 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .cal-dot{width:4px;height:4px;border-radius:50%;flex-shrink:0}
 .cal-day.cal-selected .cal-dot{background:#fff!important}
 .cal-clear-btn{font-size:12px;color:#1d4ed8;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:8px;font-family:inherit;padding:0}
-.cal-color-settings{margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0}
-.cal-color-toggle{font-size:12px;color:#6b7280;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit}
-.cal-color-row{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
-.cal-color-item{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151}
-.cal-color-item input[type="color"]{width:28px;height:28px;padding:0;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;background:none}
-.cal-color-reset{font-size:12px;color:#dc2626;background:none;border:none;cursor:pointer;text-decoration:underline;padding:0;font-family:inherit;margin-left:auto}
 .category-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f3f4f6;flex-wrap:wrap}
 .category-row:last-child{border-bottom:none}
 .category-row input[type="text"]{flex:1;min-width:100px}
@@ -275,7 +269,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <div id="task-name-wrap">
           <label id="task-name-label">用途說明</label>
           <input type="text" id="b-task-name" placeholder="例：115_08_23_什麼度冬東">
-          <div class="err" id="err-task-name">社內任務必須填寫任務名稱</div>
+          <div class="err" id="err-task-name"><span data-catname="task">社內任務</span>必須填寫任務名稱</div>
         </div>
         <div id="collab-section" style="display:none;margin-top:10px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -283,7 +277,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
             <button class="btn btn-sm" onclick="addCollabRow()">+ 新增</button>
           </div>
           <div id="collab-list"></div>
-          <p class="text-muted" style="margin-top:4px">共同成員各 +1 次社內任務場次</p>
+          <p class="text-muted" style="margin-top:4px">共同成員各 +1 次<span data-catname="task">社內任務</span>場次</p>
         </div>
       </div>
       <div class="card">
@@ -365,17 +359,6 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       已篩選 <strong id="cal-filter-date"></strong> 的借用紀錄
       <button type="button" class="cal-clear-btn" onclick="calClearSelection()">顯示全部</button>
     </div>
-    <div class="cal-color-settings">
-      <button type="button" class="cal-color-toggle" onclick="toggleCalColorSettings()">🎨 類別顏色設定</button>
-      <div id="cal-color-panel" style="display:none">
-        <div class="cal-color-row">
-          <label class="cal-color-item">個人借用 <input type="color" id="cal-color-personal" onchange="updateCalColor('personal',this.value)"></label>
-          <label class="cal-color-item">社內任務 <input type="color" id="cal-color-task" onchange="updateCalColor('task',this.value)"></label>
-          <label class="cal-color-item">成發拍攝 <input type="color" id="cal-color-event" onchange="updateCalColor('event',this.value)"></label>
-          <button type="button" class="cal-color-reset" onclick="resetCalColors()">恢復預設值</button>
-        </div>
-      </div>
-    </div>
   </div>
   <div class="card">
     <div class="tbl-wrap">
@@ -400,7 +383,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div class="card">
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th>社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
+        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th data-catname="task">社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
         <tbody id="members-body"></tbody>
       </table>
     </div>
@@ -408,7 +391,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   </div>
   <div class="card mt-12 highlight">
     <div class="card-title">任務兌換說明</div>
-    <p class="text-sm" style="color:#555">完成 <strong>3 場社內任務</strong>可兌換 1 次個人借用資格，兌換後扣除 3 場。</p>
+    <p class="text-sm" style="color:#555">完成 <strong>3 場<span data-catname="task">社內任務</span></strong>可兌換 1 次<span data-catname="personal">個人借用</span>資格，兌換後扣除 3 場。</p>
   </div>
 </div>
 
@@ -486,17 +469,8 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div id="setting-placeholder" style="display:none">
     <div class="card" style="max-width:560px">
       <div class="card-title">自訂表單欄位提示文字（Placeholder）</div>
-      <p class="text-muted" style="margin-bottom:12px">同時套用至管理員及一般使用者的借用表單。</p>
-      <div class="inline-form" style="margin-top:0">
-        <div><label>姓名</label><input type="text" id="ph-name"></div>
-        <div><label>系級</label><input type="text" id="ph-dept"></div>
-      </div>
-      <div class="inline-form">
-        <div><label>學號</label><input type="text" id="ph-sid"></div>
-        <div><label>電話</label><input type="text" id="ph-phone"></div>
-      </div>
-      <label>Gmail</label><input type="text" id="ph-email">
-      <label>任務名稱 / 用途說明</label><input type="text" id="ph-taskName">
+      <p class="text-muted" style="margin-bottom:12px">同時套用至管理員及一般使用者的借用表單與查詢頁。欄位留空儲存＝使用預設文字。</p>
+      <div id="ph-fields"></div>
       <button class="btn btn-primary" onclick="savePlaceholders()" style="margin-top:12px">儲存提示文字</button>
       <div id="ph-ok" style="color:#059669;font-size:12px;margin-top:6px;display:none">已儲存 ✓</div>
     </div>
@@ -613,7 +587,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     <div class="err" id="err-m-name" style="display:none">請輸入姓名</div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;margin-top:12px">
       <input type="checkbox" id="m-isOfficer" style="width:auto">
-      <span>幹部（個人借用可借社內任務器材）</span>
+      <span>幹部（<span data-catname="personal">個人借用</span>可借<span data-catname="task">社內任務</span>器材）</span>
     </label>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-member')">取消</button>
@@ -676,11 +650,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
 
     <label>可借類別</label>
-    <div style="margin-top:5px;display:flex;gap:16px">
-      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-p" style="width:auto"> 個人借用</label>
-      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-e" style="width:auto"> 成發拍攝</label>
-      <label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" id="eq-t" checked style="width:auto"> 社內任務</label>
-    </div>
+    <div id="eq-allow-list" style="margin-top:5px;display:flex;gap:6px 16px;flex-wrap:wrap"></div>
     <div class="err" id="err-eq-allow" style="display:none">請至少勾選一個類別（停用除外）</div>
     <div class="err" id="err-eq-cards" style="display:none"></div>
     <div class="modal-footer">
@@ -859,6 +829,13 @@ function renderCatDropdowns(){
     if([...bCat.options].some(o=>o.value===cur))bCat.value=cur;
   }
 
+  const erCat=document.getElementById('er-cat');
+  if(erCat){
+    const cur=erCat.value;
+    erCat.innerHTML=optsHtml;
+    if([...erCat.options].some(o=>o.value===cur))erCat.value=cur;
+  }
+  document.querySelectorAll('[data-catname]').forEach(el=>{const c=categories.find(x=>x.id===el.dataset.catname);if(c)el.textContent=c.name;});
   const filterCat=document.getElementById('filter-cat');
   if(filterCat){
     const cur=filterCat.value||'all';
@@ -878,7 +855,11 @@ function openCategoryModal(){
 }
 function renderCategoryList(){
   document.getElementById('category-list').innerHTML=categories.map(c=>`
-    <div class="category-row" data-id="${c.id}">
+    <div class="category-row" data-id="${c.id}" draggable="true"
+         ondragstart="catDragStart(event,'${c.id}')" ondragover="catDragOver(event,'${c.id}')" ondragleave="catDragLeave(event)" ondrop="catDragDrop(event,'${c.id}')" ondragend="catDragEnd(event)">
+      <span title="拖曳排序" style="cursor:grab;color:#9ca3af;user-select:none">☰</span>
+      <button type="button" class="btn btn-sm" style="padding:2px 6px" onclick="moveCategory('${c.id}',-1)" title="上移">▲</button>
+      <button type="button" class="btn btn-sm" style="padding:2px 6px" onclick="moveCategory('${c.id}',1)" title="下移">▼</button>
       <input type="text" id="cat-name-${c.id}" value="${c.name}">
       <input type="color" id="cat-color-${c.id}" value="${c.color}">
       <label><input type="checkbox" id="cat-admin-${c.id}" ${c.adminOnly?'checked':''}>僅管理員可見</label>
@@ -887,12 +868,44 @@ function renderCategoryList(){
       <button type="button" class="btn btn-sm btn-danger" onclick="deleteCategory('${c.id}')">刪除</button>
     </div>`).join('');
 }
+// ── Category ordering (admin) — the member form uses the same server-side order ──
+let dragCatId=null;
+function catDragStart(e,id){dragCatId=id;e.currentTarget.classList.add('dragging');try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}}
+function catDragOver(e,id){if(!dragCatId)return;e.preventDefault();if(dragCatId!==id)e.currentTarget.classList.add('drop-target');}
+function catDragLeave(e){e.currentTarget.classList.remove('drop-target');}
+function catDragEnd(e){e.currentTarget.classList.remove('dragging');dragCatId=null;document.querySelectorAll('#category-list .drop-target').forEach(x=>x.classList.remove('drop-target'));}
+async function catDragDrop(e,targetId){
+  e.preventDefault();e.currentTarget.classList.remove('drop-target');
+  const srcId=dragCatId;dragCatId=null;
+  if(!srcId||srcId===targetId)return;
+  const si=categories.findIndex(c=>c.id===srcId),ti=categories.findIndex(c=>c.id===targetId);
+  if(si<0||ti<0)return;
+  const [moved]=categories.splice(si,1);categories.splice(ti,0,moved);
+  await saveCategoryOrder();
+}
+async function moveCategory(id,delta){
+  const i=categories.findIndex(c=>c.id===id),j=i+delta;
+  if(i<0||j<0||j>=categories.length)return;
+  const [moved]=categories.splice(i,1);categories.splice(j,0,moved);
+  await saveCategoryOrder();
+}
+async function saveCategoryOrder(){
+  const errEl=document.getElementById('category-err');
+  errEl.style.display='none';
+  try{
+    await api('/api/admin/categories-order',{method:'POST',body:JSON.stringify({ids:categories.map(c=>c.id)})});
+    syncAfterCategoryChange();
+  }catch(e){
+    errEl.textContent='排序儲存失敗：'+e.message;errEl.style.display='block';
+    try{const d=await api('/api/admin/state');categories=d.categories||categories;}catch(_){}
+    syncAfterCategoryChange();
+  }
+}
+
 // After any successful category CRUD: refresh local state, sync calendar dot colors
 // (via the existing updateCalColor()/CAL_CAT_COLORS machinery), and re-render every
 // place a category can appear — dropdowns, filtered list, badges, calendar.
 function syncAfterCategoryChange(){
-  categories.forEach(c=>{ CAL_CAT_COLORS[c.id]=c.color; });
-  saveCalColors();
   renderCatDropdowns();
   renderCategoryList();
   if(document.getElementById('page-records').classList.contains('active'))renderRecords();
@@ -1032,11 +1045,6 @@ async function loadAdminState(){
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
   emailSettings=d.emailSettings||{};placeholders=d.placeholders||{};
   locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];
-  // Backfill CAL_CAT_COLORS with each category's server-configured color for any
-  // id not already present (e.g. a brand-new custom category) — an existing
-  // localStorage-saved override (from the quick color picker) always wins and is
-  // never touched here, since loadCalColors() already ran and populated those.
-  categories.forEach(c=>{ if(CAL_CAT_COLORS[c.id]===undefined) CAL_CAT_COLORS[c.id]=c.color; });
   renderCatDropdowns();
   initPage();
 }
@@ -1064,23 +1072,25 @@ function setDefaultTimes(){
   document.getElementById('b-end').value=fmtDTL(new Date(now.getTime()+7*24*60*60*1000));
 }
 
-function applyPlaceholders(){
-  const map={name:'b-name',dept:'b-dept',sid:'b-sid',phone:'b-phone',email:'b-email',taskName:'b-task-name'};
-  const def={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東'};
-  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=placeholders[k]||def[k];});
+// Every fillable field whose hint text the admin can edit. [key, label, admin form input id|null]
+const PH_FIELDS=[
+  ['name','借用人姓名','b-name'],['dept','系級','b-dept'],['sid','學號','b-sid'],
+  ['phone','電話','b-phone'],['email','Gmail','b-email'],['taskName','用途說明 / 任務名稱','b-task-name'],
+  ['note','備註','b-note'],['collabName','共同成員：姓名',null],['collabSid','共同成員：學號',null],
+  ['eqSearch','搜尋器材（借用端）',null],['vName','查詢頁：姓名',null],['vSid','查詢頁：學號',null],['vPhone','查詢頁：電話',null]
+];
+const PH_DEFAULTS={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東',note:'',collabName:'姓名',collabSid:'學號',eqSearch:'搜尋器材名稱...',vName:'輸入姓名',vSid:'輸入學號',vPhone:'輸入電話'};
+function phText(k,src){const v=(src||placeholders||{})[k];return (v!==undefined&&v!==null&&v!=='')?v:(PH_DEFAULTS[k]||'');}
+function applyPlaceholders(src){
+  PH_FIELDS.forEach(([k,,id])=>{if(!id)return;const el=document.getElementById(id);if(el)el.placeholder=phText(k,src);});
 }
 
 // Fetch placeholders from public API (no auth needed) and apply to form before login
 async function loadPublicPlaceholders(){
   try{
     const d=await fetch('/api/public-placeholders').then(r=>r.json());
-    const map={name:'b-name',dept:'b-dept',sid:'b-sid',phone:'b-phone',email:'b-email',taskName:'b-task-name'};
-    Object.entries(map).forEach(([k,id])=>{
-      const el=document.getElementById(id);
-      if(el&&d[k])el.placeholder=d[k];
-    });
+    applyPlaceholders(d);
   }catch(e){
-    // Silent fail – default HTML placeholders remain if API unavailable
     console.warn('loadPublicPlaceholders failed:',e);
   }
 }
@@ -1301,7 +1311,7 @@ function openEqSchedule(eqId){
 function addCollabRow(){
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
-  div.innerHTML=`<input type="text" placeholder="姓名" style="flex:1"><input type="text" placeholder="學號" style="flex:1">
+  div.innerHTML=`<input type="text" placeholder="${phText('collabName')}" style="flex:1"><input type="text" placeholder="${phText('collabSid')}" style="flex:1">
     <button class="btn btn-sm btn-danger" onclick="this.parentNode.remove()">✕</button>`;
   document.getElementById('collab-list').appendChild(div);
 }
@@ -1388,57 +1398,7 @@ function calChangeMonth(delta){
   if(calViewMonth>11){calViewMonth=0;calViewYear++;}
   renderCalendar();
 }
-// Centralized color map for calendar dots by borrow category — this object's
-// properties are mutated in place (never reassigned) so every existing reference
-// to CAL_CAT_COLORS stays valid whether the values are defaults or admin-picked.
-const CAL_CAT_COLORS_DEFAULT = {
-  personal: '#ec4899', // 個人借用 (粉紅/桃紅)
-  task:     '#10b981', // 社內任務 (綠)
-  event:    '#f59e0b', // 成發拍攝 (橘黃)
-  default:  '#3b82f6'  // 其他預設 (藍)
-};
-const CAL_CAT_COLORS = {...CAL_CAT_COLORS_DEFAULT};
 const CAL_MAX_DOTS = 4; // cap dots per day to keep the cell compact when many records overlap
-
-// Load any admin-customized colors from localStorage, falling back to defaults
-// for anything missing or if the saved value is malformed.
-function loadCalColors(){
-  try{
-    const saved=JSON.parse(localStorage.getItem('cal_cat_colors')||'{}');
-    Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT,saved);
-  }catch{
-    Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT);
-  }
-}
-function saveCalColors(){
-  localStorage.setItem('cal_cat_colors',JSON.stringify(CAL_CAT_COLORS));
-}
-function syncCalColorInputs(){
-  const p=document.getElementById('cal-color-personal');
-  const t=document.getElementById('cal-color-task');
-  const e=document.getElementById('cal-color-event');
-  if(p)p.value=CAL_CAT_COLORS.personal;
-  if(t)t.value=CAL_CAT_COLORS.task;
-  if(e)e.value=CAL_CAT_COLORS.event;
-}
-function toggleCalColorSettings(){
-  const panel=document.getElementById('cal-color-panel');
-  const willOpen=panel.style.display==='none';
-  panel.style.display=willOpen?'block':'none';
-  if(willOpen)syncCalColorInputs();
-}
-function updateCalColor(cat,hex){
-  CAL_CAT_COLORS[cat]=hex;
-  saveCalColors();
-  renderCalendar();
-}
-function resetCalColors(){
-  Object.assign(CAL_CAT_COLORS,CAL_CAT_COLORS_DEFAULT);
-  localStorage.removeItem('cal_cat_colors');
-  syncCalColorInputs();
-  renderCalendar();
-}
-loadCalColors(); // apply any saved custom colors immediately, before first renderCalendar() call
 
 function calDateKey(y,mo,d){return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;}
 // Map of 'YYYY-MM-DD' → array of `cat` values for every record covering that day
@@ -1478,7 +1438,7 @@ function renderCalendar(){
     const isSelected=calSelectedDate===key;
     const isToday=key===todayKey;
     const dotsHtml=hasRecord
-      ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${CAL_CAT_COLORS[cat]||CAL_CAT_COLORS.default}"></span>`).join('')}</div>`
+      ?`<div class="cal-dots-container">${cats.slice(0,CAL_MAX_DOTS).map(cat=>`<span class="cal-dot" style="background:${catColor(cat)}"></span>`).join('')}</div>`
       :'';
     html+=`<div class="cal-day${hasRecord?' cal-has-record':''}${isSelected?' cal-selected':''}${isToday?' cal-today':''}" onclick="calSelectDate('${key}')">${d}${dotsHtml}</div>`;
   }
@@ -1542,8 +1502,9 @@ function renderRecords(){
     // Quick-mark records are pure calendar notes: no equipment, no borrower, no
     // review step. Render a simplified row and skip every action that only makes
     // sense for a real borrow (審核/歸還/修改器材/完整編輯) — only offer delete.
+    const dragAttr=`draggable="true" ondragstart="recDragStart(event,'${r.id}')" ondragover="recDragOver(event,'${r.id}')" ondragleave="recDragLeave(event)" ondrop="recDragDrop(event,'${r.id}')" ondragend="recDragEnd(event)" style="cursor:grab"`;
     if(r.isQuickMark){
-      return`<tr style="background:#fafafa">
+      return`<tr ${dragAttr.replace('style="cursor:grab"','style="background:#fafafa;cursor:grab"')}>
         <td colspan="4">📌 ${catBadgeHtml(r.cat)} ${r.note?r.note:'<span style="color:#9ca3af">（無備註）</span>'}</td>
         <td style="font-size:11px;white-space:nowrap">${fmtDate(r.start)}</td>
         <td style="font-size:11px;white-space:nowrap">${fmtDate(r.end)}</td>
@@ -1566,7 +1527,7 @@ function renderRecords(){
       ?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">審核</button>`
       :r.cs!=='done'?`<button class="btn btn-sm btn-warn" onclick="openReturn('${r.id}')">歸還</button>`:'';
     const editRecBtn=`<button class="btn btn-sm" style="margin-top:2px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe" onclick="openEditRecord('${r.id}')">✏️ 完整編輯</button>`;
-    return`<tr>
+    return`<tr ${dragAttr}>
       <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span></td>
       <td style="font-size:11px">${r.dept||''}<br>${r.sid||''}</td>
       <td>${catBadgeHtml(r.cat)}${r.taskName?`<br><span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}</td>
@@ -1585,6 +1546,39 @@ function renderRecords(){
       </td>
     </tr>`;
   }).join('');
+}
+
+// ═══ RECORD DRAG-REORDER (persists ids only via POST /api/admin/records-order) ═══
+let dragRecId=null;
+function recDragStart(e,id){
+  dragRecId=id;e.currentTarget.classList.add('dragging');
+  try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',id);}catch(_){}
+}
+function recDragOver(e,id){
+  if(!dragRecId)return;
+  e.preventDefault();
+  if(dragRecId!==id)e.currentTarget.classList.add('drop-target');
+}
+function recDragLeave(e){e.currentTarget.classList.remove('drop-target');}
+function recDragEnd(e){e.currentTarget.classList.remove('dragging');dragRecId=null;
+  document.querySelectorAll('#records-body .drop-target').forEach(x=>x.classList.remove('drop-target'));}
+async function recDragDrop(e,targetId){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drop-target');
+  const srcId=dragRecId;dragRecId=null;
+  if(!srcId||srcId===targetId)return;
+  const si=records.findIndex(x=>x.id===srcId),ti=records.findIndex(x=>x.id===targetId);
+  if(si<0||ti<0)return;
+  const backup=records.slice();
+  const [moved]=records.splice(si,1);
+  records.splice(ti,0,moved);
+  renderRecords();
+  try{
+    await api('/api/admin/records-order',{method:'POST',body:JSON.stringify({ids:records.map(x=>x.id)})});
+  }catch(err){
+    records=backup;renderRecords();
+    alert('排序儲存失敗：'+err.message);
+  }
 }
 
 async function deleteRecord(id){
@@ -1926,7 +1920,7 @@ async function removeTask(id){
 }
 async function redeemTask(id){
   const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<3)return;
-  if(!confirm(`幫 ${m.name} 兌換 1 次個人借用？（扣 3 場）`))return;
+  if(!confirm(`幫 ${m.name} 兌換 1 次${catLabel('personal')}？（扣 3 場）`))return;
   try{
     const d=await api(`/api/admin/members/${id}/redeem`,{method:'POST'});
     const idx=members.findIndex(x=>x.id===id);
@@ -2104,10 +2098,17 @@ function openAddEq(){
   _eqCardsWorking=[];
   document.getElementById('eq-card-section').style.display='none';
   renderCardList();
-  ['eq-p','eq-e','eq-t'].forEach((id,i)=>document.getElementById(id).checked=i===2);
+  renderEqAllow(['task']);
   populateLocSelect('eq-location','');
   ['err-eq-name','err-eq-allow','err-eq-cards'].forEach(id=>document.getElementById(id).style.display='none');
   openModal('modal-eq');
+}
+// 可借類別 checkboxes are generated from the live `categories` list (same names, same
+// order as the 借用類別 dropdowns), so renames/reorders/new categories show up here too.
+function renderEqAllow(selected){
+  const sel=new Set(selected||[]);
+  document.getElementById('eq-allow-list').innerHTML=categories.map(c=>
+    `<label style="margin:0;display:flex;align-items:center;gap:5px;font-size:13px;color:#374151"><input type="checkbox" value="${c.id}" ${sel.has(c.id)?'checked':''} style="width:auto"> ${c.name}${c.adminOnly?'（管理員限定）':''}</label>`).join('');
 }
 function openEditEq(id){
   const e=equipment.find(x=>x.id===id);if(!e)return;
@@ -2127,9 +2128,7 @@ function openEditEq(id){
   }
   document.getElementById('eq-card-section').style.display=e.type==='記憶卡'?'block':'none';
   renderCardList();
-  document.getElementById('eq-p').checked=(e.allow||[]).includes('personal');
-  document.getElementById('eq-e').checked=(e.allow||[]).includes('event');
-  document.getElementById('eq-t').checked=(e.allow||[]).includes('task');
+  renderEqAllow(e.allow||[]);
   populateLocSelect('eq-location',e.location||'');
   ['err-eq-name','err-eq-allow','err-eq-cards'].forEach(id=>document.getElementById(id).style.display='none');
   openModal('modal-eq');
@@ -2141,7 +2140,7 @@ async function saveEquipment(){
   const location=document.getElementById('eq-location').value;
   const ownership=document.getElementById('eq-ownership').value.trim();
   const note=document.getElementById('eq-note').value.trim();
-  const allow=['personal','event','task'].filter((_,i)=>document.getElementById(['eq-p','eq-e','eq-t'][i]).checked);
+  const allow=[...document.querySelectorAll('#eq-allow-list input[type=checkbox]')].filter(x=>x.checked).map(x=>x.value);
   if(!name){document.getElementById('err-eq-name').style.display='block';return;}
   if(eqStatus!=='disabled'&&!allow.length){document.getElementById('err-eq-allow').style.display='block';return;}
 
@@ -2302,10 +2301,13 @@ async function locDragDrop(e,targetIdx){
 }
 // Placeholders
 function loadPlaceholdersUI(){
-  ['name','dept','sid','phone','email','taskName'].forEach(k=>{const el=document.getElementById('ph-'+k);if(el)el.value=placeholders[k]||'';});
+  const box=document.getElementById('ph-fields');
+  if(!box)return;
+  box.innerHTML=PH_FIELDS.map(([k,label])=>`<label>${label}</label><input type="text" id="ph-${k}" placeholder="${(PH_DEFAULTS[k]||'（預設為空）').replace(/"/g,'&quot;')}">`).join('');
+  PH_FIELDS.forEach(([k])=>{const el=document.getElementById('ph-'+k);if(el)el.value=placeholders[k]||'';});
 }
 async function savePlaceholders(){
-  ['name','dept','sid','phone','email','taskName'].forEach(k=>{const el=document.getElementById('ph-'+k);if(el)placeholders[k]=el.value.trim();});
+  PH_FIELDS.forEach(([k])=>{const el=document.getElementById('ph-'+k);if(el)placeholders[k]=el.value.trim();});
   await apiPut('placeholders',placeholders);applyPlaceholders();
   document.getElementById('ph-ok').style.display='block';setTimeout(()=>document.getElementById('ph-ok').style.display='none',2000);
 }
@@ -2918,7 +2920,7 @@ async function saveEditRecord(){
 
   if(!name||!dept||!sid||!phone||!email){errEl.textContent='借用人資料不完整';errEl.style.display='block';return;}
   if(!cat){errEl.textContent='請選擇借用類別';errEl.style.display='block';return;}
-  if(cat==='task'&&!taskName){errEl.textContent='社內任務必須填寫任務名稱';errEl.style.display='block';return;}
+  if(cat==='task'&&!taskName){errEl.textContent=catLabel('task')+'必須填寫任務名稱';errEl.style.display='block';return;}
   if(!start||!end||new Date(end)<=new Date(start)){errEl.textContent='借用時間不正確';errEl.style.display='block';return;}
 
   // Collect equipment from rendered rows

@@ -97,7 +97,7 @@ input:focus,select:focus{border-color:#3b82f6}
       <div id="ub-task-name-wrap">
         <label id="ub-task-name-label">用途說明</label>
         <input type="text" id="ub-task-name" placeholder="例：115_08_23_什麼度冬東">
-        <div class="err" id="ub-err-task-name">社內任務必須填寫任務名稱</div>
+        <div class="err" id="ub-err-task-name"><span data-catname="task">社內任務</span>必須填寫任務名稱</div>
       </div>
       <div id="ub-collab-section" style="display:none;margin-top:10px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -105,7 +105,7 @@ input:focus,select:focus{border-color:#3b82f6}
           <button class="btn btn-sm btn-outline" onclick="addUCollabRow()">+ 新增</button>
         </div>
         <div id="ub-collab-list"></div>
-        <p style="font-size:11px;color:#94a3b8;margin-top:3px">共同成員各 +1 次社內任務場次</p>
+        <p style="font-size:11px;color:#94a3b8;margin-top:3px">共同成員各 +1 次<span data-catname="task">社內任務</span>場次</p>
       </div>
     </div>
 
@@ -158,7 +158,7 @@ input:focus,select:focus{border-color:#3b82f6}
     <div id="verify-section">
       <div class="verify-hero">
         <h3>🔐 身分驗證</h3>
-        <p>請輸入資訊以查詢個人借用紀錄</p>
+        <p>請輸入資訊以查詢<span data-catname="personal">個人借用</span>紀錄</p>
       </div>
       <div class="card">
         <div class="grid-2">
@@ -272,6 +272,7 @@ function renderUCatDropdown(){
   if(!sel)return;
   const cur=sel.value;
   sel.innerHTML=`<option value="">選擇類別</option>`+pubCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.querySelectorAll('[data-catname]').forEach(el=>{const c=pubCategories.find(z=>z.id===el.dataset.catname);if(c)el.textContent=c.name;});
   if([...sel.options].some(o=>o.value===cur))sel.value=cur;
 }
 
@@ -310,9 +311,10 @@ function refreshOfficerStatus(){
 }
 
 function applyPlaceholders(){
-  const def={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東'};
-  const map={name:'ub-name',dept:'ub-dept',sid:'ub-sid',phone:'ub-phone',email:'ub-email',taskName:'ub-task-name'};
-  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=pubPlaceholders[k]||def[k];});
+  const def={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東',note:'',collabName:'姓名',collabSid:'學號',eqSearch:'搜尋器材名稱...',vName:'輸入姓名',vSid:'輸入學號',vPhone:'輸入電話'};
+  const map={name:'ub-name',dept:'ub-dept',sid:'ub-sid',phone:'ub-phone',email:'ub-email',taskName:'ub-task-name',note:'ub-note',eqSearch:'ub-eq-search',vName:'v-name',vSid:'v-sid',vPhone:'v-phone'};
+  Object.entries(map).forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.placeholder=pubPlaceholders[k]||def[k]||'';});
+  window._phCollab={name:pubPlaceholders.collabName||def.collabName,sid:pubPlaceholders.collabSid||def.collabSid};
 }
 
 // Section switch
@@ -617,7 +619,7 @@ function setUCard(eqId,idx,val){
 function addUCollabRow(){
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
-  div.innerHTML=`<input type="text" placeholder="姓名" style="flex:1"><input type="text" placeholder="學號" style="flex:1">
+  div.innerHTML=`<input type="text" placeholder="${(window._phCollab||{name:'姓名'}).name}" style="flex:1"><input type="text" placeholder="${(window._phCollab||{sid:'學號'}).sid}" style="flex:1">
     <button class="btn btn-sm" style="width:auto;background:#fff;border:1.5px solid #fca5a5;color:#dc2626" onclick="this.parentNode.remove()">✕</button>`;
   document.getElementById('ub-collab-list').appendChild(div);
 }

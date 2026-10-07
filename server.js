@@ -144,12 +144,18 @@ const DEFAULT_EQ = [
   {id:'e105',name:'RCA-3.5（15m）',type:'配件',qty:1,usableQty:1,allow:['event','task'],eqStatus:'available',location:'',ownership:'',note:'',cardNumbers:[],cards:[]}
 ];
 
-const DEFAULT_PH={name:'輸入姓名',dept:'例：企管二乙',sid:'例：D1234567',phone:'09123456789',email:'abc@gmail.com',taskName:'例：115_08_23_什麼咚咚'};
+const DEFAULT_PH={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東',note:'',collabName:'姓名',collabSid:'學號',eqSearch:'搜尋器材名稱...',vName:'輸入姓名',vSid:'輸入學號',vPhone:'輸入電話'};
 const DEFAULT_EMAIL={serviceId:'',templateId:'',pubKey:'',adminEmail:'',subject:'【器材借用】您的申請已通過審核',body:'親愛的 {{to_name}} 同學您好，\n\n您的借用申請已通過審核！\n\n器材：{{borrow_items}}\n借出：{{borrow_start}}\n歸還：{{borrow_end}}\n\n如有問題請洽管理員。',notifySubject:'【器材借用通知】新的借用申請',notifyBody:'有新的借用申請需要審核。\n\n申請人：{{to_name}}\n系級：{{dept}}\n學號：{{sid}}\n電話：{{phone}}\n申請人Email：{{email}}\n\n任務名稱：{{taskName}}\n\n借用日期：{{borrow_start}}\n歸還日期：{{borrow_end}}\n\n申請器材：\n{{borrow_items}}\n\n請至管理員後台查看並審核。',notifyTemplateId:'',resetTemplateId:'',approveTemplateId:''};
 const DEFAULT_LOCATIONS=['社辦A櫃','社辦B櫃','社辦C架','倉庫'];
 const DEFAULT_CAT_ORDER=['相機','攝影機','鏡頭','濾鏡','麥克風','燈光','腳架','記憶卡','配件'];
+// Borrow categories (personal/task/event etc.) — NOT to be confused with DEFAULT_CAT_ORDER
+// above, which orders EQUIPMENT TYPES (相機/鏡頭/...). This is the admin-manageable list
+// of borrow-purpose categories a record's `cat` field can be. The three built-ins are
+// protected from deletion server-side (see DELETE /api/admin/categories/:id) because
+// officer-permission logic and the task-count credit system are semantically tied to
+// the literal ids 'personal' and 'task'.
 const DEFAULT_CATEGORIES=[
-  {id:'personal',name:'練習借用',color:'#ec4899',adminOnly:false,builtin:true},
+  {id:'personal',name:'個人借用',color:'#ec4899',adminOnly:false,builtin:true},
   {id:'task',name:'社內任務',color:'#10b981',adminOnly:false,builtin:true},
   {id:'event',name:'成發拍攝',color:'#f59e0b',adminOnly:false,builtin:true}
 ];
@@ -218,7 +224,8 @@ function readDB(){
     if(!d.catOrder)  d.catOrder=DEFAULT_CAT_ORDER;
     if(!d.categories||!d.categories.length) d.categories=DEFAULT_CATEGORIES;
     if(!d.placeholders) d.placeholders=DEFAULT_PH;
-    if(d.placeholders.taskName===undefined) d.placeholders.taskName=DEFAULT_PH.taskName;
+    // Fill only placeholder keys that don't exist yet; never overwrite admin-edited text.
+    Object.keys(DEFAULT_PH).forEach(k=>{ if(d.placeholders[k]===undefined) d.placeholders[k]=DEFAULT_PH[k]; });
     if(!d.emailSettings) d.emailSettings=DEFAULT_EMAIL;
     if(d.emailSettings.adminEmail===undefined) d.emailSettings.adminEmail='';
     if(d.emailSettings.notifySubject===undefined) d.emailSettings.notifySubject=DEFAULT_EMAIL.notifySubject;
@@ -332,20 +339,51 @@ function effectiveAllow(cat,isOfficer){
 }
 
 // ── getOccupied: qty in use for eqId in time window ──
+// Returns every valid "returned" key for one equipment line item.
+// - Items with NO assigned cards keep the exact original single-key scheme
+//   (`${id}__${qty}`) — fully backward compatible with every existing record.
+// - Items WITH assigned cards get one key PER CARD (`${id}__card__${cardNumber}`),
+//   allowing each physical card to be returned independently, plus (rare edge case)
+//   one extra key for any portion of qty that was left "不指定"/unassigned.
+function itemReturnKeys(item){
+  const cards=(item.assignedCards||[]).filter(Boolean);
+  if(cards.length===0)return [`${item.id}__${item.qty}`];
+  const keys=cards.map(cn=>`${item.id}__card__${cn}`);
+  const unassignedQty=item.qty-cards.length;
+  if(unassignedQty>0)keys.push(`${item.id}__unassigned__${unassignedQty}`);
+  return keys;
+}
+// Is this one item's entire quantity returned? Recognizes the legacy whole-item key
+// (so records marked returned before this feature existed still read correctly) OR
+// every per-card/unassigned key for the item being present.
+function isItemFullyReturned(item,returnedItems){
+  const legacyKey=`${item.id}__${item.qty}`;
+  if(returnedItems.includes(legacyKey))return true;
+  return itemReturnKeys(item).every(k=>returnedItems.includes(k));
+}
+
 function getOccupied(eqId,start,end,excludeId){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   return db.records.filter(r=>{
     if(r.id===excludeId)return false;
     if(r.status==='pending'||r.status==='done')return false;
-    const returned=r.returnedItems||[];
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return false;
-    if(returned.includes(item.id+'__'+item.qty))return false;
+    if(isItemFullyReturned(item,r.returnedItems||[]))return false;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
     return true;
   }).reduce((sum,r)=>{
     const item=(r.equipment||[]).find(x=>x.id===eqId);
-    return sum+(item?item.qty:0);
+    if(!item)return sum;
+    const returned=r.returnedItems||[];
+    const cards=(item.assignedCards||[]).filter(Boolean);
+    if(cards.length===0)return sum+item.qty; // no cards: whole-item tracking, unchanged
+    // Card item: only count cards that have NOT been individually returned yet, plus
+    // any still-outstanding unassigned portion of qty.
+    const outstandingCards=cards.filter(cn=>!returned.includes(`${item.id}__card__${cn}`)).length;
+    const unassignedQty=Math.max(0,item.qty-cards.length);
+    const unassignedReturned=unassignedQty>0&&returned.includes(`${item.id}__unassigned__${unassignedQty}`);
+    return sum+outstandingCards+(unassignedReturned?0:unassignedQty);
   },0);
 }
 
@@ -359,9 +397,18 @@ function getBusyCards(eqId,start,end,excludeId){
     if(r.status==='done'||r.status==='pending')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
-    if((r.returnedItems||[]).includes(item.id+'__'+item.qty))return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
-    (item.assignedCards||[]).forEach(c=>{if(c)busy.add(c);});
+    const returned=r.returnedItems||[];
+    const legacyKey=`${item.id}__${item.qty}`;
+    const wholeItemReturned=returned.includes(legacyKey);
+    (item.assignedCards||[]).forEach(c=>{
+      if(!c)return;
+      // A card is free as soon as EITHER the legacy whole-item key is present (old
+      // data, pre-dating per-card return) OR that specific card was individually
+      // returned — other cards from the same borrow can still be busy.
+      if(wholeItemReturned||returned.includes(`${item.id}__card__${c}`))return;
+      busy.add(c);
+    });
   });
   return busy;
 }
@@ -438,8 +485,10 @@ function validateRecordsArray(recordsArr){
         if(other.status==='pending'||other.status==='done') continue;
         const otherItem=(other.equipment||[]).find(x=>x.id===item.id);
         if(!otherItem) continue;
-        if((other.returnedItems||[]).includes(otherItem.id+'__'+otherItem.qty)) continue;
-        const otherCards=(otherItem.assignedCards||[]).filter(Boolean);
+        if(isItemFullyReturned(otherItem,other.returnedItems||[])) continue;
+        const otherReturned=other.returnedItems||[];
+        const otherCards=(otherItem.assignedCards||[]).filter(Boolean)
+          .filter(cn=>!otherReturned.includes(`${otherItem.id}__card__${cn}`));
         const overlap=cards.filter(c=>otherCards.includes(c));
         if(!overlap.length) continue;
         const rs=new Date(r.start),re=new Date(r.end),os=new Date(other.start),oe=new Date(other.end);
@@ -529,7 +578,9 @@ const server=http.createServer(async(req,res)=>{
     // ── Public placeholders ──
     if(m==='GET'&&p==='/api/public-placeholders'){
       const def=DEFAULT_PH,ph=db.placeholders||{};
-      return json(res,200,{name:ph.name||def.name,dept:ph.dept||def.dept,sid:ph.sid||def.sid,phone:ph.phone||def.phone,email:ph.email||def.email,taskName:ph.taskName||def.taskName});
+      const out={};
+      Object.keys(def).forEach(k=>{out[k]=(ph[k]!==undefined&&ph[k]!==null)?ph[k]:def[k];});
+      return json(res,200,out);
     }
 
     // ── Public state ──
@@ -537,15 +588,23 @@ const server=http.createServer(async(req,res)=>{
     // per-person via POST /api/member/check-officer so anonymous visitors can
     // never harvest the full officer roster's personal data.
     if(m==='GET'&&p==='/api/public-state'){
-  return json(res,200,{
-    equipment:db.equipment,
-    records:publicRecords(),
-    placeholders:db.placeholders,
-    locations:db.locations,
-    catOrder:db.catOrder,
-    categories:(db.categories||[]).filter(c=>!c.adminOnly)
-  });
-}
+      return json(res,200,{
+        equipment:db.equipment,
+        records:publicRecords(),
+        placeholders:db.placeholders,
+        locations:db.locations,
+        catOrder:db.catOrder,
+        // Server-side filtered: adminOnly categories are never sent to anonymous
+        // visitors at all — this is not just hidden by the UI, it genuinely never
+        // leaves the server for a non-admin request.
+        categories:(db.categories||[]).filter(c=>!c.adminOnly)
+      });
+    }
+
+    // ── Public: category list only (same adminOnly filtering as /api/public-state) ──
+    if(m==='GET'&&p==='/api/categories'){
+      return json(res,200,{categories:(db.categories||[]).filter(c=>!c.adminOnly)});
+    }
 
     // ── Public: check if a specific person (by exact name+sid+phone match) is an officer ──
     // Returns ONLY a boolean — never the officer roster, never any member's stored data.
@@ -618,86 +677,9 @@ const server=http.createServer(async(req,res)=>{
     // ── Admin full state ──
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories||[]});
+      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories});
     }
 
-    // ── Admin: quick calendar mark — a pure note/tag record with no equipment and
-    // no borrower identity. Skips review entirely: status is ALWAYS forced to
-    // 'approved' server-side (never trusted from the client), so it can never sit
-    // in the pending-review queue or need anyone's approval. Marked with
-    // isQuickMark:true so the UI can render it distinctly and skip actions
-    // (approve/return/edit-equipment) that only make sense for a real borrow.
-    if(m==='POST'&&p==='/api/admin/quick-mark'){
-      if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      const b=await bodyJSON(req);
-      if(!b.cat||!(db.categories||[]).some(c=>c.id===b.cat))return json(res,400,{error:'請選擇有效的標記類別'});
-      if(!b.start||!b.end)return json(res,400,{error:'請選擇日期'});
-      if(new Date(b.end)<new Date(b.start))return json(res,400,{error:'日期區間不正確'});
-      const rec={
-        id:'mark'+Date.now(),
-        isQuickMark:true,
-        name:'[管理員標記]',dept:'',sid:'',phone:'',email:'',
-        cat:b.cat,taskName:'',
-        start:b.start,end:b.end,
-        note:String(b.note||'').trim(),
-        equipment:[],collabs:[],
-        status:'approved', // forced — quick marks are never subject to review
-        returnedItems:[],
-        createdAt:new Date().toISOString()
-      };
-      db.records.unshift(rec);
-      writeDB(db);
-      return json(res,200,{ok:true,record:rec});
-    }
-    
-// Admin Categories CRUD
-  if(p==='/api/admin/categories'&&m==='POST'){
-    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
-    const b=await bodyJSON(req);
-    const name=String(b.name||'').trim();
-    const color=String(b.color||'#3b82f6').trim();
-    const adminOnly=!!b.adminOnly;
-    if(!name) return json(res,400,{error:'請輸入類別名稱'});
-    const db=readDB();
-    const id='cat_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-    const newCat={id,name,color,adminOnly,builtin:false};
-    db.categories.push(newCat);
-    writeDB(db);
-    return json(res,200,{ok:true,category:newCat});
-  }
-
-  if(p.startsWith('/api/admin/categories/')&&m==='PUT'){
-    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
-    const id=p.split('/').pop();
-    const b=await bodyJSON(req);
-    const name=String(b.name||'').trim();
-    const color=String(b.color||'#3b82f6').trim();
-    const adminOnly=!!b.adminOnly;
-    if(!name) return json(res,400,{error:'請輸入類別名稱'});
-    const db=readDB();
-    const cat=db.categories.find(c=>c.id===id);
-    if(!cat) return json(res,404,{error:'找不到該類別'});
-    cat.name=name;
-    cat.color=color;
-    cat.adminOnly=adminOnly;
-    writeDB(db);
-    return json(res,200,{ok:true,category:cat});
-  }
-
-  if(p.startsWith('/api/admin/categories/')&&m==='DELETE'){
-    if(!isAdmin(req)) return json(res,401,{error:'未登入'});
-    const id=p.split('/').pop();
-    const db=readDB();
-    const cat=db.categories.find(c=>c.id===id);
-    if(!cat) return json(res,404,{error:'找不到該類別'});
-    if(cat.builtin) return json(res,400,{error:'內建類別不可刪除'});
-    const inUse=db.records.some(r=>r.cat===id&&r.status!=='done'&&r.status!=='rejected');
-    if(inUse) return json(res,400,{error:'尚有進行中的借用使用此類別，無法刪除'});
-    db.categories=db.categories.filter(c=>c.id!==id);
-    writeDB(db);
-    return json(res,200,{ok:true});
-  }
-    
     // ── Admin bulk update any top-level key ──
     if(m==='PUT'&&p.startsWith('/api/admin/state/')){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
@@ -711,6 +693,25 @@ const server=http.createServer(async(req,res)=>{
       const allowed=['members','equipment','emailSettings','placeholders','locations','catOrder'];
       if(!allowed.includes(key))return json(res,400,{error:'不允許的欄位'});
       db[key]=b.value;writeDB(db);return json(res,200,{ok:true});
+    }
+
+    // ── Admin reorder records (ids only; never adds/removes/edits a record) ──
+    // The posted ids are placed, in the posted order, into the slots those same
+    // records already occupy in db.records. Unknown ids are ignored and records
+    // not mentioned (e.g. hidden by a filter, or created meanwhile) keep their slot.
+    if(m==='POST'&&p==='/api/admin/records-order'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      if(!Array.isArray(b.ids))return json(res,400,{error:'ids 格式錯誤'});
+      const byId=new Map(db.records.map(r=>[r.id,r]));
+      const ids=[...new Set(b.ids.map(String))].filter(id=>byId.has(id));
+      const idSet=new Set(ids);
+      const slots=[];
+      db.records.forEach((r,i)=>{if(idSet.has(r.id))slots.push(i);});
+      slots.sort((a,b2)=>a-b2);
+      ids.forEach((id,k)=>{db.records[slots[k]]=byId.get(id);});
+      writeDB(db);
+      return json(res,200,{ok:true,order:db.records.map(r=>r.id)});
     }
 
     // ── Admin change password ──
@@ -762,7 +763,7 @@ const server=http.createServer(async(req,res)=>{
       const idx=db.records.findIndex(r=>r.id===recId);
       if(idx===-1)return json(res,404,{error:'紀錄不存在'});
       if(!b.name||!b.dept||!b.sid||!b.phone||!b.email)return json(res,400,{error:'借用人資料不完整'});
-      if(!b.cat||!['personal','event','task'].includes(b.cat))return json(res,400,{error:'借用類別無效'});
+      if(!b.cat||!(db.categories||[]).some(c=>c.id===b.cat))return json(res,400,{error:'借用類別無效'});
       if(b.cat==='task'&&!String(b.taskName||'').trim())return json(res,400,{error:'社內任務必須填寫任務名稱'});
       if(!b.start||!b.end)return json(res,400,{error:'時間不完整'});
       if(new Date(b.end)<=new Date(b.start))return json(res,400,{error:'歸還時間必須晚於借出時間'});
@@ -799,14 +800,21 @@ const server=http.createServer(async(req,res)=>{
         })),
         returnedItems:(()=>{
           const raw=Array.isArray(b.returnedItems)?b.returnedItems:old.returnedItems||[];
-          const validKeys=new Set((b.equipment||[]).map(e=>e.id+'__'+Number(e.qty)));
+          // Build valid keys via itemReturnKeys() (per-card for memory-card items,
+          // legacy whole-item key for everything else) so editing a record's equipment
+          // list never silently drops existing per-card return progress.
+          const validKeys=new Set();
+          (b.equipment||[]).forEach(e=>{
+            validKeys.add(`${e.id}__${Number(e.qty)}`); // legacy whole-item key always allowed
+            itemReturnKeys({id:e.id,qty:Number(e.qty),assignedCards:e.assignedCards}).forEach(k=>validKeys.add(k));
+          });
           return raw.filter(k=>validKeys.has(k));
         })(),
         updatedAt:new Date().toISOString()
       };
       if(updated.returnedItems.length>0){
         const allEq=updated.equipment||[];
-        if(allEq.length>0&&allEq.every(e=>updated.returnedItems.includes(e.id+'__'+e.qty))){
+        if(allEq.length>0&&allEq.every(e=>isItemFullyReturned(e,updated.returnedItems))){
           updated.status='done';
           if(!updated.returnedAt)updated.returnedAt=new Date().toISOString();
         }
@@ -873,23 +881,26 @@ const server=http.createServer(async(req,res)=>{
     }
 
     // ── Admin: register full or partial return for a single record by id ──
+    // Supports per-card individual return for memory-card items: `returnedKeys` may
+    // contain a mix of legacy whole-item keys (non-card equipment) and per-card keys
+    // (`${eqId}__card__${cardNumber}`), each validated via itemReturnKeys().
     if(m==='POST'&&p.match(/^\/api\/admin\/records\/[^/]+\/return$/)){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       const recId=p.split('/')[4];
       const b=await bodyJSON(req);
       const rec=db.records.find(r=>r.id===recId);
       if(!rec)return json(res,404,{error:'紀錄不存在'});
+      const allEq=rec.equipment||[];
       if(b.all){
-        rec.returnedItems=(rec.equipment||[]).map(e=>e.id+'__'+e.qty);
+        rec.returnedItems=allEq.flatMap(e=>itemReturnKeys(e));
         rec.status='done';
         rec.returnedAt=new Date().toISOString();
       }else{
-        const validKeys=new Set((rec.equipment||[]).map(e=>e.id+'__'+e.qty));
+        const validKeys=new Set(allEq.flatMap(e=>itemReturnKeys(e)));
         const addKeys=(Array.isArray(b.returnedKeys)?b.returnedKeys:[]).filter(k=>validKeys.has(k));
         if(!addKeys.length)return json(res,400,{error:'請至少勾選一項尚未歸還的器材'});
         rec.returnedItems=[...new Set([...(rec.returnedItems||[]),...addKeys])];
-        const allEq=rec.equipment||[];
-        if(allEq.length>0&&allEq.every(e=>rec.returnedItems.includes(e.id+'__'+e.qty))){
+        if(allEq.length>0&&allEq.every(e=>isItemFullyReturned(e,rec.returnedItems))){
           rec.status='done';
           if(!rec.returnedAt) rec.returnedAt=new Date().toISOString();
         }
@@ -931,10 +942,82 @@ const server=http.createServer(async(req,res)=>{
         name:e.name||(db.equipment.find(x=>x.id===e.id)||{name:e.id}).name,
         assignedCards:Array.isArray(e.assignedCards)?e.assignedCards.filter(Boolean):[]
       }));
-      const validKeys=new Set(rec.equipment.map(e=>e.id+'__'+e.qty));
+      // Keep both the legacy whole-item key and every valid per-card key so editing the
+      // equipment list never silently drops existing per-card return progress.
+      const validKeys=new Set();
+      rec.equipment.forEach(e=>{
+        validKeys.add(`${e.id}__${e.qty}`);
+        itemReturnKeys(e).forEach(k=>validKeys.add(k));
+      });
       rec.returnedItems=(rec.returnedItems||[]).filter(k=>validKeys.has(k));
       writeDB(db);
       return json(res,200,{ok:true,record:rec});
+    }
+
+    // ── Admin: create a new borrow category ──
+    if(m==='POST'&&p==='/api/admin/categories'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const name=String(b.name||'').trim();
+      if(!name)return json(res,400,{error:'請輸入類別名稱'});
+      if(!db.categories)db.categories=[];
+      if(db.categories.find(c=>c.name===name))return json(res,400,{error:'此類別名稱已存在'});
+      const color=/^#[0-9a-fA-F]{6}$/.test(b.color||'')?b.color:'#3b82f6';
+      const cat={id:'cat_'+Date.now(),name,color,adminOnly:!!b.adminOnly,builtin:false};
+      db.categories.push(cat);
+      writeDB(db);
+      return json(res,200,{ok:true,category:cat});
+    }
+
+    // ── Admin: reorder borrow categories (ids only; never adds/removes/edits one) ──
+    // Posted ids are placed first in the posted order; any category not mentioned keeps
+    // its relative order after them. The member form follows this same order.
+    if(m==='POST'&&p==='/api/admin/categories-order'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      if(!Array.isArray(b.ids))return json(res,400,{error:'ids 格式錯誤'});
+      const byId=new Map((db.categories||[]).map(c=>[c.id,c]));
+      const ids=[...new Set(b.ids.map(String))].filter(id=>byId.has(id));
+      const idSet=new Set(ids);
+      db.categories=[...ids.map(id=>byId.get(id)),...db.categories.filter(c=>!idSet.has(c.id))];
+      writeDB(db);
+      return json(res,200,{ok:true,order:db.categories.map(c=>c.id)});
+    }
+
+    // ── Admin: edit one borrow category's name/color/adminOnly ──
+    if(m==='PUT'&&p.match(/^\/api\/admin\/categories\/[^/]+$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const catId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const cat=(db.categories||[]).find(c=>c.id===catId);
+      if(!cat)return json(res,404,{error:'類別不存在'});
+      const name=String(b.name||'').trim();
+      if(!name)return json(res,400,{error:'請輸入類別名稱'});
+      if(db.categories.find(c=>c.id!==catId&&c.name===name))return json(res,400,{error:'此類別名稱已存在'});
+      cat.name=name;
+      if(/^#[0-9a-fA-F]{6}$/.test(b.color||''))cat.color=b.color;
+      cat.adminOnly=!!b.adminOnly;
+      writeDB(db);
+      return json(res,200,{ok:true,category:cat});
+    }
+
+    // ── Admin: delete one borrow category ──
+    // Protected on two fronts: built-in categories (personal/task/event) can never be
+    // deleted regardless of usage, because officer-permission mapping and the task-count
+    // credit system are hardcoded to those exact ids; and any category still referenced
+    // by an existing borrow record is blocked to avoid orphaning historical data.
+    if(m==='DELETE'&&p.match(/^\/api\/admin\/categories\/[^/]+$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const catId=p.split('/')[4];
+      const idx=(db.categories||[]).findIndex(c=>c.id===catId);
+      if(idx===-1)return json(res,404,{error:'類別不存在'});
+      const cat=db.categories[idx];
+      if(cat.builtin)return json(res,400,{error:`「${cat.name}」為系統內建類別，不可刪除`});
+      const using=db.records.filter(r=>r.cat===catId);
+      if(using.length>0)return json(res,409,{error:`目前有 ${using.length} 筆借用紀錄使用此類別，無法刪除`});
+      db.categories.splice(idx,1);
+      writeDB(db);
+      return json(res,200,{ok:true});
     }
 
     // ── Admin: create a new member (single-item — never touches other members) ──
@@ -1052,6 +1135,35 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{ok:true,member:mem});
     }
 
+    // ── Admin: quick calendar mark — a pure note/tag record with no equipment and
+    // no borrower identity. Skips review entirely: status is ALWAYS forced to
+    // 'approved' server-side (never trusted from the client), so it can never sit
+    // in the pending-review queue or need anyone's approval. Marked with
+    // isQuickMark:true so the UI can render it distinctly and skip actions
+    // (approve/return/edit-equipment) that only make sense for a real borrow.
+    if(m==='POST'&&p==='/api/admin/quick-mark'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      if(!b.cat||!(db.categories||[]).some(c=>c.id===b.cat))return json(res,400,{error:'請選擇有效的標記類別'});
+      if(!b.start||!b.end)return json(res,400,{error:'請選擇日期'});
+      if(new Date(b.end)<new Date(b.start))return json(res,400,{error:'日期區間不正確'});
+      const rec={
+        id:'mark'+Date.now(),
+        isQuickMark:true,
+        name:'[管理員標記]',dept:'',sid:'',phone:'',email:'',
+        cat:b.cat,taskName:'',
+        start:b.start,end:b.end,
+        note:String(b.note||'').trim(),
+        equipment:[],collabs:[],
+        status:'approved', // forced — quick marks are never subject to review
+        returnedItems:[],
+        createdAt:new Date().toISOString()
+      };
+      db.records.unshift(rec);
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
+    }
+
     // ── Member submit borrow ──
     if(m==='POST'&&p==='/api/member/submit'){
       const b=await bodyJSON(req);
@@ -1060,6 +1172,14 @@ const server=http.createServer(async(req,res)=>{
       if(new Date(b.end)<=new Date(b.start))return json(res,400,{error:'借用時間不正確'});
       if(!Array.isArray(b.equipment)||!b.equipment.length)return json(res,400,{error:'至少選擇一項器材'});
       if(b.cat==='task'&&!String(b.taskName||'').trim())return json(res,400,{error:'社內任務必須填寫任務名稱'});
+
+      // Category must exist, and an adminOnly category may only be submitted through
+      // an authenticated admin session — this is enforced here server-side regardless
+      // of what the calling form does or does not show, so it can never be bypassed by
+      // simply crafting a raw request with a hidden category's id.
+      const catDef=(db.categories||[]).find(c=>c.id===b.cat);
+      if(!catDef)return json(res,400,{error:'借用類別不存在或已停用'});
+      if(catDef.adminOnly&&!isAdmin(req))return json(res,400,{error:'此類別僅限管理員使用'});
 
       const isOfficer=checkOfficer(String(b.name).trim(),String(b.sid).trim(),String(b.phone).trim());
       const effCat=effectiveAllow(b.cat,isOfficer);
