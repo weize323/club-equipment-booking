@@ -125,15 +125,6 @@ input:focus,select:focus{border-color:#3b82f6}
       <input class="search-box" type="text" id="ub-eq-search" placeholder="搜尋器材名稱..." oninput="renderUEqList()">
       <div class="cat-tabs" id="ub-cat-tabs">
         <button class="cat-tab active" onclick="filterUEqCat('all',this)">全部</button>
-        <button class="cat-tab" onclick="filterUEqCat('相機',this)">相機</button>
-        <button class="cat-tab" onclick="filterUEqCat('攝影機',this)">攝影機</button>
-        <button class="cat-tab" onclick="filterUEqCat('鏡頭',this)">鏡頭</button>
-        <button class="cat-tab" onclick="filterUEqCat('濾鏡',this)">濾鏡</button>
-        <button class="cat-tab" onclick="filterUEqCat('麥克風',this)">麥克風</button>
-        <button class="cat-tab" onclick="filterUEqCat('燈光',this)">燈光</button>
-        <button class="cat-tab" onclick="filterUEqCat('腳架',this)">腳架</button>
-        <button class="cat-tab" onclick="filterUEqCat('記憶卡',this)">記憶卡</button>
-        <button class="cat-tab" onclick="filterUEqCat('配件',this)">配件</button>
       </div>
       <div class="conflict-warn" id="ub-conflict-warn"></div>
       <div class="err" id="ub-err-eq" style="margin-bottom:6px">請至少選擇一項器材</div>
@@ -261,6 +252,7 @@ async function loadPublicState(){
   // never receive them at all, so there is nothing to hide client-side.
   pubCategories=d.categories||[];
   renderUCatDropdown();
+  renderUEqTypeTabs();
   applyPlaceholders();
   setUDefaultTimes();
   renderUEqList();
@@ -451,6 +443,15 @@ function onUCatChange(){
   }else rn.style.display='none';
   renderUEqList();renderUSelected();
   if(cat)refreshOfficerStatus(); // ensure officer status is checked even if name/sid/phone were filled before selecting a category
+}
+// Equipment-type tabs follow the admin's type names/order (types that have equipment only).
+function renderUEqTypeTabs(){
+  const box=document.getElementById('ub-cat-tabs');if(!box)return;
+  const used=[...new Set(pubEquipment.map(e=>e.type).filter(Boolean))];
+  used.sort((a,b)=>{const ia=pubCatOrder.indexOf(a),ib=pubCatOrder.indexOf(b);return(ia<0?999:ia)-(ib<0?999:ib);});
+  if(uEqFilter!=='all'&&!used.includes(uEqFilter))uEqFilter='all';
+  box.innerHTML=`<button class="cat-tab ${uEqFilter==='all'?'active':''}" onclick="filterUEqCat('all',this)">全部</button>`+
+    used.map(t=>`<button class="cat-tab ${uEqFilter===t?'active':''}" data-type="${t}" onclick="filterUEqCat(this.dataset.type,this)">${t}</button>`).join('');
 }
 function filterUEqCat(cat,btn){
   uEqFilter=cat;

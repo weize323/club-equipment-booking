@@ -297,15 +297,6 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <input class="search-box" type="text" id="eq-search" placeholder="搜尋器材名稱..." oninput="renderEqList()">
         <div class="cat-tabs" id="eq-cat-tabs">
           <button class="cat-tab active" onclick="filterEqCat('all',this)">全部</button>
-          <button class="cat-tab" onclick="filterEqCat('相機',this)">相機</button>
-          <button class="cat-tab" onclick="filterEqCat('攝影機',this)">攝影機</button>
-          <button class="cat-tab" onclick="filterEqCat('鏡頭',this)">鏡頭</button>
-          <button class="cat-tab" onclick="filterEqCat('濾鏡',this)">濾鏡</button>
-          <button class="cat-tab" onclick="filterEqCat('麥克風',this)">麥克風</button>
-          <button class="cat-tab" onclick="filterEqCat('燈光',this)">燈光</button>
-          <button class="cat-tab" onclick="filterEqCat('腳架',this)">腳架</button>
-          <button class="cat-tab" onclick="filterEqCat('記憶卡',this)">記憶卡</button>
-          <button class="cat-tab" onclick="filterEqCat('配件',this)">配件</button>
         </div>
         <div class="conflict-banner" id="conflict-banner"></div>
         <div class="err" id="err-eq" style="margin-bottom:6px">請至少選擇一項器材</div>
@@ -617,8 +608,6 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       <div>
         <label>分類</label>
         <select id="eq-type" onchange="onEqTypeChange()">
-          <option>相機</option><option>攝影機</option><option>鏡頭</option><option>濾鏡</option>
-          <option>麥克風</option><option>燈光</option><option>腳架</option><option>記憶卡</option><option>配件</option>
         </select>
       </div>
     </div>
@@ -805,7 +794,7 @@ async function apiPut(key,value){
 }
 
 // ═══ STATE (in-memory only, loaded from server) ═══
-let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[];
+let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[],eqTypes=[];
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
@@ -1054,8 +1043,8 @@ async function loadAdminState(){
   const d=await api('/api/admin/state');
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
   emailSettings=d.emailSettings||{};placeholders=d.placeholders||{};
-  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];
-  renderCatDropdowns();
+  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];
+  renderCatDropdowns();renderEqTypeOptions();renderEqTypeTabs();
   initPage();
 }
 function initPage(){
@@ -1194,6 +1183,35 @@ function onCatChange(){
   document.getElementById('task-name-label').textContent=cat==='task'?'任務名稱 *':'用途說明';
   document.getElementById('collab-section').style.display=cat==='task'?'block':'none';
   renderEqList();renderSelected();
+}
+// All equipment types: admin-ordered first (catOrder), then the rest of the selectable list.
+function allEqTypes(){
+  return [...new Set([...catOrder,...eqTypes,...equipment.map(e=>e.type)].filter(Boolean))];
+}
+function renderEqTypeOptions(selected){
+  const sel=document.getElementById('eq-type');if(!sel)return;
+  const cur=selected||sel.value||'相機';
+  const list=eqTypes.length?[...new Set([...eqTypes,...equipment.map(e=>e.type)].filter(Boolean))]:allEqTypes();
+  sel.innerHTML=list.map(t=>`<option value="${t}">${t}</option>`).join('');
+  if(list.includes(cur))sel.value=cur;
+}
+function renderEqTypeTabs(){
+  const box=document.getElementById('eq-cat-tabs');if(!box)return;
+  const types=allEqTypes();
+  if(eqFilter!=='all'&&!types.includes(eqFilter))eqFilter='all';
+  box.innerHTML=`<button class="cat-tab ${eqFilter==='all'?'active':''}" onclick="filterEqCat('all',this)">全部</button>`+
+    types.map(t=>`<button class="cat-tab ${eqFilter===t?'active':''}" data-type="${t}" onclick="filterEqCat(this.dataset.type,this)">${t}</button>`).join('');
+}
+async function renameEqType(from){
+  if(from==='記憶卡'){alert('「記憶卡」分類有逐張卡號管理功能，名稱不可更改。');return;}
+  const to=(prompt(`把分類「${from}」改名為：`,from)||'').trim();
+  if(!to||to===from)return;
+  try{
+    const d=await api('/api/admin/equipment-types/rename',{method:'POST',body:JSON.stringify({from,to})});
+    equipment=d.equipment||equipment;catOrder=d.catOrder||catOrder;eqTypes=d.eqTypes||eqTypes;
+    if(eqFilter===from)eqFilter=to;
+    renderEqTypeOptions();renderEqTypeTabs();renderEquipment();renderEqList();
+  }catch(e){alert('改名失敗：'+e.message);}
 }
 function filterEqCat(cat,btn){
   eqFilter=cat;
@@ -1994,7 +2012,8 @@ function renderEquipment(){
       ondragover="catDragOver(event,'${type}')"
       ondrop="catDragDrop(event,'${type}')"
       ondragleave="catDragLeave(event)">
-      <td colspan="10">☰ <strong>${type}</strong> <span style="font-weight:400;color:#9ca3af;font-size:11px">（${group.length} 項）</span></td>
+      <td colspan="10">☰ <strong>${type}</strong> <span style="font-weight:400;color:#9ca3af;font-size:11px">（${group.length} 項）</span>
+        ${type==='記憶卡'?'':`<button type="button" class="btn btn-sm" style="margin-left:8px;font-size:11px;padding:1px 8px" data-type="${type}" onclick="event.stopPropagation();renameEqType(this.dataset.type)">✏️ 改名</button>`}</td>
     </tr>`;
     group.forEach(e=>{
       const usableQty=(e.usableQty!=null?e.usableQty:e.qty);
@@ -2120,7 +2139,7 @@ function openAddEq(){
   document.getElementById('eq-edit-id').value='';
   document.getElementById('eq-name').value='';document.getElementById('eq-qty').value='1';
   document.getElementById('eq-usableQty').value='1';
-  document.getElementById('eq-type').value='相機';document.getElementById('eq-eqStatus').value='available';
+  renderEqTypeOptions(eqTypes[0]||'相機');document.getElementById('eq-eqStatus').value='available';
   document.getElementById('eq-ownership').value='';document.getElementById('eq-note').value='';
   _eqCardsWorking=[];
   document.getElementById('eq-card-section').style.display='none';
@@ -2143,7 +2162,7 @@ function openEditEq(id){
   document.getElementById('eq-edit-id').value=id;
   document.getElementById('eq-name').value=e.name;document.getElementById('eq-qty').value=e.qty;
   document.getElementById('eq-usableQty').value=(e.usableQty!=null?e.usableQty:e.qty);
-  document.getElementById('eq-type').value=e.type;document.getElementById('eq-eqStatus').value=e.eqStatus||'available';
+  renderEqTypeOptions(e.type);document.getElementById('eq-eqStatus').value=e.eqStatus||'available';
   document.getElementById('eq-ownership').value=e.ownership||'';document.getElementById('eq-note').value=e.note||'';
   // Load cards: prefer e.cards, fallback to cardNumbers migration
   if(e.cards&&e.cards.length){

@@ -222,6 +222,8 @@ function readDB(){
     // that would silently discard real configuration the admin already saved.
     if(!d.locations) d.locations=DEFAULT_LOCATIONS;
     if(!d.catOrder)  d.catOrder=DEFAULT_CAT_ORDER;
+    // Selectable equipment types (器材分類). Only created when absent; later renames keep it in sync.
+    if(!d.eqTypes) d.eqTypes=[...new Set([...DEFAULT_CAT_ORDER,...d.catOrder,...(d.equipment||[]).map(e=>e.type).filter(Boolean)])];
     if(!d.categories||!d.categories.length) d.categories=DEFAULT_CATEGORIES;
     if(!d.placeholders) d.placeholders=DEFAULT_PH;
     // Fill only placeholder keys that don't exist yet; never overwrite admin-edited text.
@@ -677,7 +679,7 @@ const server=http.createServer(async(req,res)=>{
     // ── Admin full state ──
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
-      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories});
+      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes});
     }
 
     // ── Admin bulk update any top-level key ──
@@ -693,6 +695,28 @@ const server=http.createServer(async(req,res)=>{
       const allowed=['members','equipment','emailSettings','placeholders','locations','catOrder'];
       if(!allowed.includes(key))return json(res,400,{error:'不允許的欄位'});
       db[key]=b.value;writeDB(db);return json(res,200,{ok:true});
+    }
+
+    // ── Admin: rename an equipment type (器材分類) everywhere in one atomic step ──
+    // Updates every equipment item of that type, catOrder and the selectable-type list.
+    // 記憶卡 is excluded: its per-card logic is keyed on that exact name.
+    if(m==='POST'&&p==='/api/admin/equipment-types/rename'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const from=String(b.from||'').trim(),to=String(b.to||'').trim();
+      if(!from||!to)return json(res,400,{error:'請輸入分類名稱'});
+      if(to.length>20)return json(res,400,{error:'分類名稱最多 20 字'});
+      if(from===to)return json(res,200,{ok:true,unchanged:true,equipment:db.equipment,catOrder:db.catOrder,eqTypes:db.eqTypes});
+      if(from==='記憶卡'||to==='記憶卡')return json(res,400,{error:'「記憶卡」分類有逐張卡號管理功能，名稱不可更改，也不可改成此名稱'});
+      const types=new Set([...(db.eqTypes||[]),...(db.catOrder||[]),...db.equipment.map(e=>e.type)]);
+      if(!types.has(from))return json(res,404,{error:'找不到此分類'});
+      if(types.has(to))return json(res,409,{error:`分類「${to}」已存在`});
+      db.equipment.forEach(e=>{if(e.type===from)e.type=to;});
+      db.catOrder=(db.catOrder||[]).map(t=>t===from?to:t);
+      db.eqTypes=(db.eqTypes||[]).map(t=>t===from?to:t);
+      if(!db.eqTypes.includes(to))db.eqTypes.push(to);
+      writeDB(db);
+      return json(res,200,{ok:true,equipment:db.equipment,catOrder:db.catOrder,eqTypes:db.eqTypes});
     }
 
     // ── Admin reorder records (ids only; never adds/removes/edits a record) ──
