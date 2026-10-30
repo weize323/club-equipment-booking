@@ -402,6 +402,10 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       <button type="button" class="btn btn-sm" onclick="toggleRedeemEdit(true)" id="redeem-edit-btn">✏️ 編輯說明</button>
     </div>
     <p class="text-sm" id="redeem-notice-text" style="color:#555;margin-top:8px;white-space:pre-wrap"></p>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:#374151">
+      規定場次：滿 <input type="number" id="redeem-threshold-input" min="1" max="99" style="width:70px;padding:4px 6px"> 場可兌換 1 次
+      <button type="button" class="btn btn-sm btn-primary" onclick="saveRedeemThreshold()">儲存</button>
+    </div>
     <div id="redeem-edit-box" style="display:none;margin-top:8px">
       <textarea id="redeem-notice-input" rows="3" style="resize:vertical" placeholder="留空＝使用預設說明"></textarea>
       <p class="text-muted" style="margin:4px 0 8px">這段文字會顯示在這裡，也會在借用端選到「個人借用」類別時顯示給借用人。留空儲存＝恢復預設。</p>
@@ -764,6 +768,14 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <label>借出時間 *</label><input type="datetime-local" id="er-start">
         <label>預計歸還時間 *</label><input type="datetime-local" id="er-end">
         <label>備註</label><textarea id="er-note" rows="2" style="resize:vertical"></textarea>
+        <div style="margin-top:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600;color:#374151">共同拍攝人員</span>
+            <button type="button" class="btn btn-sm" onclick="erAddCollabRow()">+ 新增成員</button>
+          </div>
+          <div id="er-collab-list"></div>
+          <p class="text-muted" style="margin-top:4px">「<span data-catname="task">社內任務</span>」紀錄：新增成員 +1 場、移除成員 −1 場。</p>
+        </div>
       </div>
     </div>
     <div style="margin-top:14px">
@@ -813,7 +825,7 @@ async function apiPut(key,value){
 }
 
 // ═══ STATE (in-memory only, loaded from server) ═══
-let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[],eqTypes=[];
+let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[],eqTypes=[],redeemThreshold=3;
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
@@ -1062,7 +1074,7 @@ async function loadAdminState(){
   const d=await api('/api/admin/state');
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
   emailSettings=d.emailSettings||{};placeholders=d.placeholders||{};
-  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];
+  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];redeemThreshold=d.redeemThreshold||3;
   renderCatDropdowns();renderEqTypeOptions();renderEqTypeTabs();
   initPage();
 }
@@ -1114,10 +1126,22 @@ async function loadPublicPlaceholders(){
 }
 
 // ═══ 任務兌換說明 (editable; shown here and on the member form for the 個人借用 category) ═══
-function defaultRedeemNotice(){return `完成 3 場${catLabel('task')}可兌換 1 次${catLabel('personal')}資格，兌換後扣除 3 場。`;}
+function defaultRedeemNotice(){return `完成 ${redeemThreshold} 場${catLabel('task')}可兌換 1 次${catLabel('personal')}資格，兌換後扣除 ${redeemThreshold} 場。`;}
 function renderRedeemNotice(){
   const el=document.getElementById('redeem-notice-text');
   if(el)el.textContent=(placeholders.redeemNotice||'').trim()||defaultRedeemNotice();
+  const ti=document.getElementById('redeem-threshold-input');if(ti&&document.activeElement!==ti)ti.value=redeemThreshold;
+}
+async function saveRedeemThreshold(){
+  const v=parseInt(document.getElementById('redeem-threshold-input').value,10);
+  if(!(v>=1&&v<=99)){alert('規定場次必須是 1～99 的整數');return;}
+  if(v===redeemThreshold)return;
+  if(!confirm(`把規定場次改成 ${v} 場？所有社員的「可兌換／進度」會依新規定重新計算（場次本身不變）。`))return;
+  try{
+    const d=await api('/api/admin/redeem-threshold',{method:'POST',body:JSON.stringify({value:v})});
+    redeemThreshold=d.redeemThreshold;
+    renderRedeemNotice();renderMembers();
+  }catch(e){alert('儲存失敗：'+e.message);}
 }
 function toggleRedeemEdit(on){
   document.getElementById('redeem-edit-box').style.display=on?'block':'none';
@@ -1444,10 +1468,10 @@ function onNameInput(val){
   if(!val.trim()){hint.style.display='none';return;}
   const m=members.find(x=>x.name===val.trim());
   if(!m){hint.style.display='none';return;}
-  const r=Math.floor((m.taskCount||0)/3);
+  const r=Math.floor((m.taskCount||0)/redeemThreshold);
   const roleLabel=m.isOfficer?'幹部':'社員';
   hint.style.display='block';
-  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${((m.taskCount||0)%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
+  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(redeemThreshold,10)},(_,i)=>`<span class="token${((m.taskCount||0)%redeemThreshold)>i?' filled':''}"></span>`).join('')}</span></div>`;
 }
 
 // ═══ SUBMIT BORROW ═══
@@ -1929,7 +1953,7 @@ function renderMembers(){
   document.getElementById('members-empty').style.display=members.length?'none':'block';
   if(!members.length){tbody.innerHTML='';return;}
   tbody.innerHTML=members.map(m=>{
-    const tc=m.taskCount||0,r=Math.floor(tc/3),prog=tc%3;
+    const T=redeemThreshold,tc=m.taskCount||0,r=Math.floor(tc/T),prog=tc%T;
     const officerBadge=m.isOfficer
       ?`<span class="badge-officer">幹部</span>`
       :`<span class="badge-normal">一般</span>`;
@@ -1944,9 +1968,9 @@ function renderMembers(){
       <td><span class="drag-handle">☰</span></td>
       <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
       <td>${officerBadge}</td>
-      <td>${tc} 場</td>
+      <td>${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button></td>
       <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
-      <td><span class="token-bar">${[0,1,2].map(i=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> ${prog}/3</td>
+      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}${prog}/${T} <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           ${officerBtn}
@@ -2019,6 +2043,30 @@ async function saveMember(){
     document.getElementById('err-m-name').style.display='block';
   }
 }
+async function setTaskCount(id,value){
+  const d=await api(`/api/admin/members/${id}/task-count`,{method:'POST',body:JSON.stringify({set:value})});
+  const idx=members.findIndex(x=>x.id===id);
+  if(idx>=0)members[idx]=d.member;
+  renderMembers();
+}
+async function editTaskCount(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  const v=prompt(`修改 ${m.name} 的場次（目前 ${m.taskCount||0} 場）：`,m.taskCount||0);
+  if(v===null)return;
+  const n=Number(String(v).trim());
+  if(String(v).trim()===''||!Number.isInteger(n)||n<0){alert('請輸入 0 以上的整數');return;}
+  try{await setTaskCount(id,n);}catch(e){alert('修改失敗：'+e.message);}
+}
+// 進度 = 場次 % 規定場次；只改進度，不動「可兌換次數」
+async function editTaskProgress(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  const T=redeemThreshold,tc=m.taskCount||0,r=Math.floor(tc/T);
+  const v=prompt(`修改 ${m.name} 的進度（0～${T-1}，目前 ${tc%T}/${T}）：`,tc%T);
+  if(v===null)return;
+  const n=Number(String(v).trim());
+  if(String(v).trim()===''||!Number.isInteger(n)||n<0||n>=T){alert(`請輸入 0～${T-1} 的整數`);return;}
+  try{await setTaskCount(id,r*T+n);}catch(e){alert('修改失敗：'+e.message);}
+}
 async function addTask(id){
   const m=members.find(x=>x.id===id);if(!m)return;
   try{
@@ -2040,8 +2088,8 @@ async function removeTask(id){
   }catch(e){alert('操作失敗：'+e.message);}
 }
 async function redeemTask(id){
-  const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<3)return;
-  if(!confirm(`幫 ${m.name} 兌換 1 次${catLabel('personal')}？（扣 3 場）`))return;
+  const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<redeemThreshold)return;
+  if(!confirm(`幫 ${m.name} 兌換 1 次${catLabel('personal')}？（扣 ${redeemThreshold} 場）`))return;
   try{
     const d=await api(`/api/admin/members/${id}/redeem`,{method:'POST'});
     const idx=members.findIndex(x=>x.id===id);
@@ -2900,6 +2948,20 @@ function fmtDTLfromISO(s){
   }catch{return'';}
 }
 
+function erAddCollabRow(name,sid){
+  const div=document.createElement('div');
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
+  div.innerHTML=`<input type="text" class="er-collab-name" placeholder="${phText('collabName')}" style="flex:1"><input type="text" class="er-collab-sid" placeholder="${phText('collabSid')}" style="flex:1">
+    <button type="button" class="btn btn-sm btn-danger" onclick="this.parentNode.remove()">✕</button>`;
+  div.querySelector('.er-collab-name').value=name||'';
+  div.querySelector('.er-collab-sid').value=sid||'';
+  document.getElementById('er-collab-list').appendChild(div);
+}
+function getErCollabs(){
+  return[...document.querySelectorAll('#er-collab-list > div')].map(r=>({
+    name:r.querySelector('.er-collab-name').value.trim(),sid:r.querySelector('.er-collab-sid').value.trim()
+  })).filter(x=>x.name);
+}
 function openEditRecord(id){
   const r=records.find(x=>x.id===id);
   if(!r)return;
@@ -2919,6 +2981,8 @@ function openEditRecord(id){
   document.getElementById('er-end').value=fmtDTLfromISO(r.end);
   document.getElementById('er-note').value=r.note||'';
   document.getElementById('er-err').style.display='none';
+  document.getElementById('er-collab-list').innerHTML='';
+  (r.collabs||[]).forEach(c=>erAddCollabRow(c.name,c.sid));
 
   // Build equipment rows
   erRenderEqList(r);
@@ -3073,11 +3137,12 @@ async function saveEditRecord(){
   try{
     const d=await api(`/api/admin/records/${recId}`,{
       method:'PUT',
-      body:JSON.stringify({name,dept,sid,phone,email,cat,taskName,start,end,note,equipment:eqList,returnedItems:retItems})
+      body:JSON.stringify({name,dept,sid,phone,email,cat,taskName,start,end,note,collabs:getErCollabs(),equipment:eqList,returnedItems:retItems})
     });
     // Sync local record
     const idx=records.findIndex(x=>x.id===recId);
     if(idx>=0) records[idx]=d.record;
+    if(d.members){members=d.members;if(document.getElementById('members-body'))renderMembers();}
     // Clean working copy
     if(r._erWorkingEq) delete r._erWorkingEq;
     closeModal('modal-edit-record');

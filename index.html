@@ -194,6 +194,7 @@ async function cloudJson(url,opts={}){
 }
 
 // ═══ STATE (in-memory from server) ═══
+let pubRedeemThreshold=3;
 let pubEquipment=[],pubRecords=[],pubPlaceholders={},pubLocations=[],pubCatOrder=[],pubCategories=[];
 
 const TZ='Asia/Taipei';
@@ -248,6 +249,7 @@ async function loadPublicState(){
   pubPlaceholders=d.placeholders||{};
   pubLocations=d.locations||[];
   pubCatOrder=d.catOrder||[];
+  pubRedeemThreshold=d.redeemThreshold||3;
   // Server has already excluded adminOnly categories from this response — members
   // never receive them at all, so there is nothing to hide client-side.
   pubCategories=d.categories||[];
@@ -438,7 +440,7 @@ function onUCatChange(){
   const rn=document.getElementById('ub-redeem-notice');
   if(cat==='personal'){
     const nm=id=>{const c=pubCategories.find(z=>z.id===id);return c?c.name:id;};
-    rn.textContent=(pubPlaceholders.redeemNotice||'').trim()||`完成 3 場${nm('task')}可兌換 1 次${nm('personal')}資格，兌換後扣除 3 場。`;
+    rn.textContent=(pubPlaceholders.redeemNotice||'').trim()||`完成 ${pubRedeemThreshold} 場${nm('task')}可兌換 1 次${nm('personal')}資格，兌換後扣除 ${pubRedeemThreshold} 場。`;
     rn.style.display='block';
   }else rn.style.display='none';
   renderUEqList();renderUSelected();
@@ -711,11 +713,12 @@ function refreshMemberHint(){
     try{
       const d=await cloudJson('/api/member/verify',{method:'POST',body:JSON.stringify({name,sid,phone})});
       if(!d.ok){hint.style.display='none';return;}
+      const T=d.redeemThreshold||pubRedeemThreshold||3;
       const tc=d.taskCount||0;
-      const r=Math.floor(tc/3);
+      const r=Math.floor(tc/T);
       const roleLabel=d.isOfficer?'幹部':'社員';
       hint.style.display='block';
-      document.getElementById('ub-member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${tc}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${[0,1,2].map(i=>`<span class="token${(tc%3)>i?' filled':''}"></span>`).join('')}</span></div>`;
+      document.getElementById('ub-member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${tc}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(T,10)},(_,i)=>`<span class="token${(tc%T)>i?' filled':''}"></span>`).join('')}</span></div>`;
     }catch{
       hint.style.display='none';
     }

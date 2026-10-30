@@ -281,6 +281,8 @@ function writeDB(d){
   fs.renameSync(tmp,DB_FILE); // atomic — data.json is only ever replaced in one step
 }
 
+// Number of 社內任務 sessions needed for 1 redeem (admin-configurable, default 3).
+function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&&n<=99)?n:3;}
 function ensureEqTypes(){ if(!db.eqTypes) db.eqTypes=[...new Set([...DEFAULT_CAT_ORDER,...(db.catOrder||[]),...(db.equipment||[]).map(e=>e.type).filter(Boolean)])]; }
 let db=readDB();
 
@@ -601,7 +603,8 @@ const server=http.createServer(async(req,res)=>{
         // Server-side filtered: adminOnly categories are never sent to anonymous
         // visitors at all — this is not just hidden by the UI, it genuinely never
         // leaves the server for a non-admin request.
-        categories:(db.categories||[]).filter(c=>!c.adminOnly)
+        categories:(db.categories||[]).filter(c=>!c.adminOnly),
+        redeemThreshold:getThreshold()
       });
     }
 
@@ -682,7 +685,7 @@ const server=http.createServer(async(req,res)=>{
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       ensureEqTypes();
-      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes});
+      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes,redeemThreshold:getThreshold()});
     }
 
     // ── Admin bulk update any top-level key ──
@@ -851,6 +854,9 @@ const server=http.createServer(async(req,res)=>{
         phone:String(b.phone).trim(),email:String(b.email).trim(),cat:b.cat,
         taskName:String(b.taskName||'').trim(),start:b.start,end:b.end,
         note:String(b.note||'').trim(),
+        collabs:Array.isArray(b.collabs)
+          ?b.collabs.map(c=>({name:String((c&&c.name)||'').trim(),sid:String((c&&c.sid)||'').trim()})).filter(c=>c.name)
+          :(old.collabs||[]),
         equipment:b.equipment.map(e=>({
           id:e.id,qty:Number(e.qty),
           name:e.name||(db.equipment.find(x=>x.id===e.id)||{name:e.id}).name,
@@ -877,8 +883,28 @@ const server=http.createServer(async(req,res)=>{
           if(!updated.returnedAt)updated.returnedAt=new Date().toISOString();
         }
       }
-      db.records[idx]=updated;writeDB(db);
-      return json(res,200,{ok:true,record:updated,publicRecords:publicRecords()});
+      db.records[idx]=updated;
+      // Keep collaborators' 社內任務 counts consistent with the submit rule (+1 per collaborator on a
+      // task record): newly added collaborators get +1, removed ones -1 (never below 0).
+      {
+        const key=c=>(c.sid?'s:'+c.sid:'n:'+c.name);
+        const before=new Map((old.cat==='task'?(old.collabs||[]):[]).map(c=>[key(c),c]));
+        const after=new Map((updated.cat==='task'?(updated.collabs||[]):[]).map(c=>[key(c),c]));
+        const findMem=c=>db.members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
+        for(const [k,c] of after){
+          if(before.has(k))continue;
+          let cm=findMem(c);
+          if(!cm){cm={id:'m'+Date.now()+Math.random(),name:c.name,sid:c.sid||'',dept:'',phone:'',email:'',taskCount:0,isOfficer:false};db.members.push(cm);}
+          cm.taskCount=(cm.taskCount||0)+1;
+        }
+        for(const [k,c] of before){
+          if(after.has(k))continue;
+          const cm=findMem(c);
+          if(cm)cm.taskCount=Math.max(0,(cm.taskCount||0)-1);
+        }
+      }
+      writeDB(db);
+      return json(res,200,{ok:true,record:updated,members:db.members,publicRecords:publicRecords()});
     }
 
     // ── Admin: update assigned cards ──
@@ -1175,20 +1201,39 @@ const server=http.createServer(async(req,res)=>{
       const b=await bodyJSON(req);
       const mem=db.members.find(x=>x.id===memId);
       if(!mem)return json(res,404,{error:'社員不存在'});
-      const delta=Number(b.delta)||0;
-      mem.taskCount=Math.max(0,(mem.taskCount||0)+delta);
+      if(b.set!==undefined&&b.set!==null&&b.set!==''){
+        // Absolute value (admin manually correcting a member's session count)
+        const v=Number(b.set);
+        if(!Number.isInteger(v)||v<0||v>9999)return json(res,400,{error:'場次必須是 0 以上的整數'});
+        mem.taskCount=v;
+      }else{
+        const delta=Number(b.delta)||0;
+        mem.taskCount=Math.max(0,(mem.taskCount||0)+delta);
+      }
       writeDB(db);
       return json(res,200,{ok:true,member:mem});
     }
 
-    // ── Admin: redeem 3 task-count for 1 personal-borrow credit, for one member ──
+    // ── Admin: set how many sessions equal one redeem (default 3) ──
+    if(m==='POST'&&p==='/api/admin/redeem-threshold'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const v=Number(b.value);
+      if(!Number.isInteger(v)||v<1||v>99)return json(res,400,{error:'規定場次必須是 1～99 的整數'});
+      db.redeemThreshold=v;
+      writeDB(db);
+      return json(res,200,{ok:true,redeemThreshold:v});
+    }
+
+    // ── Admin: redeem task-count for 1 personal-borrow credit, for one member ──
     if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/redeem$/)){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       const memId=p.split('/')[4];
       const mem=db.members.find(x=>x.id===memId);
       if(!mem)return json(res,404,{error:'社員不存在'});
-      if((mem.taskCount||0)<3)return json(res,400,{error:'任務場次不足 3 場，無法兌換'});
-      mem.taskCount-=3;
+      const T=getThreshold();
+      if((mem.taskCount||0)<T)return json(res,400,{error:`任務場次不足 ${T} 場，無法兌換`});
+      mem.taskCount-=T;
       writeDB(db);
       return json(res,200,{ok:true,member:mem});
     }
@@ -1301,8 +1346,8 @@ const server=http.createServer(async(req,res)=>{
       const name=String(b.name||'').trim(),sid=String(b.sid||'').trim(),phone=String(b.phone||'').trim();
       const member=db.members.find(x=>x.name===name&&x.sid===sid&&x.phone===phone);
       const recs=db.records.filter(r=>r.name===name&&r.sid===sid&&r.phone===phone);
-      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false,taskCount:0});
-      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer),taskCount:(member&&member.taskCount)||0});
+      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false,taskCount:0,redeemThreshold:getThreshold()});
+      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer),taskCount:(member&&member.taskCount)||0,redeemThreshold:getThreshold()});
     }
 
     // ── Admin import legacy ──
