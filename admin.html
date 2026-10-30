@@ -1982,7 +1982,7 @@ function renderMembers(){
       <td>${officerBadge}</td>
       <td>${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button></td>
       <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
-      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer;text-decoration:underline dotted" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
+      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           ${officerBtn}
