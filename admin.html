@@ -1960,6 +1960,15 @@ async function confirmReturn(all){
 }
 
 // ═══ MEMBERS ═══
+// Task (社內任務) records a member took part in — as main borrower or as a collaborator.
+function memberTaskRecords(m){
+  return records.filter(r=>{
+    if(r.isQuickMark||r.cat!=='task')return false;
+    if(r.name===m.name||(m.sid&&r.sid===m.sid))return true;
+    return (r.collabs||[]).some(c=>c&&((c.name&&c.name===m.name)||(m.sid&&c.sid===m.sid)));
+  }).map(r=>({r,role:(r.name===m.name||(m.sid&&r.sid===m.sid))?'主借':'共同'}));
+}
+function memberTaskLabel(t){return (t.r.taskName||'').trim()||'（未填任務名稱）';}
 function renderMembers(){
   const tbody=document.getElementById('members-body');
   document.getElementById('members-empty').style.display=members.length?'none':'block';
@@ -1980,7 +1989,11 @@ function renderMembers(){
       <td><span class="drag-handle">☰</span></td>
       <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
       <td>${officerBadge}</td>
-      <td>${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button></td>
+      <td style="max-width:230px">${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button>${(()=>{
+        const ts=memberTaskRecords(m);if(!ts.length)return '';
+        const shown=ts.slice(0,3).map(t=>`<div style="font-size:11px;color:#374151;margin-top:3px">🎬 ${escHtml(memberTaskLabel(t))}${t.role==='共同'?' <span style="color:#1d4ed8">（共同）</span>':''}</div>`).join('');
+        const more=ts.length>3?`<div style="font-size:11px;margin-top:3px"><a href="#" style="color:#1d4ed8" onclick="viewMemberDetail('${m.id}');return false">…還有 ${ts.length-3} 筆，查看全部</a></div>`:'';
+        return shown+more;})()}</td>
       <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
       <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
       <td>
@@ -2120,12 +2133,18 @@ async function delMember(id){
 function viewMemberDetail(id){
   const m=members.find(x=>x.id===id);
   const recs=records.filter(r=>r.name===m.name||(m.sid&&r.sid===m.sid));
+  const tasks=memberTaskRecords(m);
   document.getElementById('md-title').textContent=m.name+' 的借用紀錄';
-  document.getElementById('md-body').innerHTML=!recs.length?'<p class="text-muted">尚無紀錄</p>':
+  const taskHtml=tasks.length?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:9px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:5px">🎬 ${catLabel('task')}（${tasks.length} 筆）</div>
+      ${tasks.map(t=>`<div style="font-size:12px;margin-bottom:3px">${escHtml(memberTaskLabel(t))}
+        <span style="color:#6b7280">· ${fmtDate(t.r.start)}${t.role==='共同'?` · <span style="color:#1d4ed8">共同（主借：${escHtml(t.r.name)}）</span>`:''}</span> ${statusBadge(computeStatus(t.r))}</div>`).join('')}
+    </div>`:'';
+  document.getElementById('md-body').innerHTML=taskHtml+(!recs.length?'<p class="text-muted">尚無自己名下的借用紀錄</p>':
     recs.map(r=>`<div style="border:1px solid #e5e7eb;border-radius:7px;padding:9px;margin-bottom:7px">
       <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px">${catBadgeHtml(r.cat)}${statusBadge(computeStatus(r))}${r.taskName?`<span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}</div>
       <div style="font-size:12px">${(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')}</div>
-    </div>`).join('');
+    </div>`).join(''));
   openModal('modal-member-detail');
 }
 
