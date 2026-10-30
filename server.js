@@ -881,8 +881,8 @@ const server=http.createServer(async(req,res)=>{
         if(allEq.length>0&&allEq.every(e=>isItemFullyReturned(e,updated.returnedItems))){
           updated.status='done';
           if(!updated.returnedAt)updated.returnedAt=new Date().toISOString();
-        }
-      }
+        }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
+      }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
       db.records[idx]=updated;
       // Keep collaborators' 社內任務 counts consistent with the submit rule (+1 per collaborator on a
       // task record): newly added collaborators get +1, removed ones -1 (never below 0).
@@ -905,6 +905,35 @@ const server=http.createServer(async(req,res)=>{
       }
       writeDB(db);
       return json(res,200,{ok:true,record:updated,members:db.members,publicRecords:publicRecords()});
+    }
+
+    // ── Admin: mark ONE returnable unit (a single memory card, the unassigned remainder, or a
+    //    whole non-card item) as returned / not returned. Reversible; only touches this record. ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/records\/[^/]+\/return-item$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const recId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const rec=db.records.find(r=>r.id===recId);
+      if(!rec)return json(res,404,{error:'紀錄不存在'});
+      if(rec.status==='pending')return json(res,400,{error:'審核中的紀錄尚未借出，無法設定歸還'});
+      const item=(rec.equipment||[]).find(e=>e.id===b.eqId);
+      if(!item)return json(res,404,{error:'此紀錄沒有該器材'});
+      const keys=itemReturnKeys(item);
+      const key=String(b.key||'');
+      if(!keys.includes(key))return json(res,400,{error:'歸還項目無效'});
+      let ret=Array.isArray(rec.returnedItems)?[...rec.returnedItems]:[];
+      // Legacy whole-item key → expand into per-unit keys so one unit can be toggled
+      const legacy=`${item.id}__${item.qty}`;
+      if(ret.includes(legacy)&&!keys.includes(legacy)){ret=ret.filter(k=>k!==legacy);keys.forEach(k=>{if(!ret.includes(k))ret.push(k);});}
+      if(b.returned){if(!ret.includes(key))ret.push(key);}
+      else ret=ret.filter(k=>k!==key);
+      rec.returnedItems=ret;
+      const allEq=rec.equipment||[];
+      if(allEq.length&&allEq.every(e=>isItemFullyReturned(e,ret))){
+        rec.status='done';if(!rec.returnedAt)rec.returnedAt=new Date().toISOString();
+      }else if(rec.status==='done'){rec.status='approved';delete rec.returnedAt;}
+      writeDB(db);
+      return json(res,200,{ok:true,record:rec});
     }
 
     // ── Admin: update assigned cards ──

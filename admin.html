@@ -86,6 +86,9 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 .hint-box{background:#e0f2fe;border-radius:6px;padding:6px 9px;font-size:12px;color:#0369a1;margin-top:5px}
 .eq-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
 .dot-available{background:#10b981}.dot-inuse{background:#f59e0b}.dot-repairing{background:#ef4444}.dot-lost{background:#6b7280}.dot-disabled{background:#d1d5db}
+.ret-chip{cursor:pointer;user-select:none;border:1px solid transparent}
+.ret-chip.is-ret{background:#d1fae5;color:#065f46;text-decoration:line-through}
+.ret-chip.not-ret{background:#fef3c7;color:#92400e;border-color:#fcd34d}
 .card-chip{font-size:10px;background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 5px;margin-left:3px;font-weight:600}
 .loc-chip{font-size:10px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;margin-left:3px}
 .own-chip{font-size:10px;background:#f5f3ff;color:#5b21b6;border-radius:4px;padding:1px 5px;margin-left:3px}
@@ -1670,12 +1673,20 @@ function renderRecords(){
     const eqHtml=(r.equipment||[]).map(e=>{
       const isRet=isItemFullyReturned(e,returned);
       const cards=(e.assignedCards||[]).filter(Boolean);
-      const cardStr=cards.length?` <span class="card-chip">${cards.join(' ')}</span>`:'';
+      const canToggle=cards.length>0&&r.cs!=='pending';
+      const unassignedQty=e.qty-cards.length;
+      const chip=(key,label)=>{
+        const done=returned.includes(key)||returned.includes(`${e.id}__${e.qty}`);
+        return `<span class="card-chip ret-chip ${done?'is-ret':'not-ret'}" data-rid="${r.id}" data-eq="${e.id}" data-key="${key}" data-ret="${done?1:0}" onclick="toggleReturnItem(this)" title="${done?'已歸還，點一下改回未還':'未還，點一下標記已歸還'}">${done?'✓':'○'} ${label}</span>`;
+      };
+      const cardStr=cards.length?(canToggle
+        ?' '+cards.map(cn=>chip(`${e.id}__card__${cn}`,cn)).join('')+(unassignedQty>0?chip(`${e.id}__unassigned__${unassignedQty}`,`未指定×${unassignedQty}`):'')
+        :` <span class="card-chip">${cards.join(' ')}</span>`):'';
       // Show assign-card button for equipment that has cardNumbers defined
       const eqDef=equipment.find(x=>x.id===e.id);
       const hasCardNums=eqDef&&(eqDef.cardNumbers||[]).length>0;
       const assignBtn=!isRet&&hasCardNums?`<button class="btn btn-sm" style="font-size:10px;padding:2px 6px;margin-left:4px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe" onclick="openCardAssign('${r.id}','${e.id}')">🎴卡號</button>`:'';
-      return`<div style="${isRet?'text-decoration:line-through;color:#9ca3af':''}">• ${e.name}×${e.qty}${cardStr}${assignBtn}</div>`;
+      return`<div style="${isRet&&!canToggle?'text-decoration:line-through;color:#9ca3af':''}">• <span style="${isRet&&canToggle?'text-decoration:line-through;color:#9ca3af':''}">${e.name}×${e.qty}</span>${cardStr}${assignBtn}</div>`;
     }).join('');
     const actionBtns=r.cs==='pending'
       ?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">審核</button>`
@@ -1736,6 +1747,16 @@ async function recDragDrop(e,targetId){
     records=backup;renderRecords();
     alert('排序儲存失敗：'+err.message);
   }
+}
+
+async function toggleReturnItem(el){
+  const returned=el.dataset.ret==='1';
+  try{
+    const d=await api(`/api/admin/records/${el.dataset.rid}/return-item`,{method:'POST',body:JSON.stringify({eqId:el.dataset.eq,key:el.dataset.key,returned:!returned})});
+    const idx=records.findIndex(x=>x.id===el.dataset.rid);
+    if(idx>=0)records[idx]=d.record;
+    renderRecords();renderEqList();
+  }catch(e){alert('操作失敗：'+e.message);}
 }
 
 async function deleteRecord(id){
@@ -3160,7 +3181,11 @@ async function saveEditRecord(){
     const rawSelections=[...cardSels].map(s=>s.value);
     const assignedCards=rawSelections.filter(Boolean);
     eqList.push({id:eqItem.id,qty,name:eqItem.name,assignedCards});
-    if(isRet) retItems.push(eqItem.id+'__'+qty);
+    // Preserve existing per-card return progress; only change this item when its 「已還」 box was toggled
+    const wasRet=isItemFullyReturned(eqItem,r.returnedItems||[]);
+    if(isRet&&!wasRet)itemReturnKeys({id:eqItem.id,qty,assignedCards}).forEach(k=>retItems.push(k));
+    else if(isRet||!wasRet)(r.returnedItems||[]).filter(k=>k.startsWith(eqItem.id+'__')).forEach(k=>retItems.push(k));
+    // (wasRet && !isRet → drop this item's keys = marked as not returned)
   }
 
   const btn=document.getElementById('er-save-btn');
