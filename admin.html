@@ -390,7 +390,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div class="card">
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th data-catname="task">社內任務</th><th>可兌換</th><th>進度</th><th>操作</th></tr></thead>
+        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th data-catname="task">社內任務</th><th>可兌換</th><th>進度 <button type="button" class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editRedeemThreshold()" title="修改規定次數">✏️ 規定次數</button></th><th>操作</th></tr></thead>
         <tbody id="members-body"></tbody>
       </table>
     </div>
@@ -1131,6 +1131,18 @@ function renderRedeemNotice(){
   const el=document.getElementById('redeem-notice-text');
   if(el)el.textContent=(placeholders.redeemNotice||'').trim()||defaultRedeemNotice();
   const ti=document.getElementById('redeem-threshold-input');if(ti&&document.activeElement!==ti)ti.value=redeemThreshold;
+}
+async function editRedeemThreshold(){
+  const v=prompt(`修改規定次數：滿幾場可兌換 1 次？（目前 ${redeemThreshold} 場，範圍 1～99）`,redeemThreshold);
+  if(v===null)return;
+  const n=Number(String(v).trim());
+  if(String(v).trim()===''||!Number.isInteger(n)||n<1||n>99){alert('請輸入 1～99 的整數');return;}
+  if(n===redeemThreshold)return;
+  try{
+    const d=await api('/api/admin/redeem-threshold',{method:'POST',body:JSON.stringify({value:n})});
+    redeemThreshold=d.redeemThreshold;
+    renderRedeemNotice();renderMembers();
+  }catch(e){alert('儲存失敗：'+e.message);}
 }
 async function saveRedeemThreshold(){
   const v=parseInt(document.getElementById('redeem-threshold-input').value,10);
@@ -1970,7 +1982,7 @@ function renderMembers(){
       <td>${officerBadge}</td>
       <td>${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button></td>
       <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
-      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}${prog}/${T} <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
+      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer;text-decoration:underline dotted" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           ${officerBtn}
