@@ -1591,6 +1591,7 @@ function calRecordCoversDate(r,dateKey){
   return target>=sDay&&target<=eDay;
 }
 
+function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function renderRecords(){
   renderCalendar();
   const sf=document.getElementById('filter-status').value;
@@ -1647,7 +1648,10 @@ function renderRecords(){
     return`<tr ${dragAttr}>
       <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span></td>
       <td style="font-size:11px">${r.dept||''}<br>${r.sid||''}</td>
-      <td>${catBadgeHtml(r.cat)}${r.taskName?`<br><span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}</td>
+      <td style="max-width:200px">${catBadgeHtml(r.cat)}${r.taskName?`<br><span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}
+        ${(r.collabs||[]).filter(c=>c&&(c.name||c.sid)).length?`<div style="font-size:11px;color:#1d4ed8;margin-top:4px">👥 共同：${(r.collabs||[]).filter(c=>c&&(c.name||c.sid)).map(c=>escHtml(c.name||'')+(c.sid?`（${escHtml(c.sid)}）`:'')).join('、')}</div>`:''}
+        ${(r.note||'').trim()?`<div style="font-size:11px;color:#6b7280;margin-top:4px;white-space:pre-wrap;background:#f9fafb;border-radius:5px;padding:3px 6px">📝 ${escHtml(r.note)}</div>`:''}
+      </td>
       <td style="font-size:11px;max-width:180px">${eqHtml}<br>
         <button class="btn btn-sm" style="margin-top:3px;font-size:11px" onclick="openEditRecEq('${r.id}')">✏️ 修改器材</button>
       </td>
