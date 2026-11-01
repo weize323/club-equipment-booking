@@ -265,7 +265,11 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       <div class="card">
         <div class="card-title">① 借用人資訊</div>
         <label>姓名 *</label>
-        <input type="text" id="b-name" placeholder="輸入姓名" oninput="onNameInput(this.value)">
+        <input type="text" id="b-name" placeholder="輸入姓名" list="b-name-list" autocomplete="off" onfocus="refreshMemberDatalist()" oninput="onNameInput(this.value)">
+        <datalist id="b-name-list"></datalist>
+        <label style="display:flex;align-items:center;gap:6px;margin:4px 0 0;font-size:11px;color:#6b7280;font-weight:400">
+          <input type="checkbox" id="b-autofill" style="width:auto" onchange="setAutoFillPref(this.checked)"> 輸入社員姓名時，自動帶入系級、學號、電話、Gmail
+        </label>
         <div id="member-hint" style="display:none"><div id="member-info-box"></div></div>
         <div class="err" id="err-name">請輸入姓名</div>
         <div class="inline-form" style="margin-top:0">
@@ -1092,6 +1096,7 @@ async function loadAdminState(){
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
   emailSettings=d.emailSettings||{};placeholders=d.placeholders||{};
   locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];redeemThreshold=d.redeemThreshold||3;uiPrefs=d.uiPrefs||{};
+  refreshMemberDatalist();
   renderCatDropdowns();renderEqTypeOptions();renderEqTypeTabs();
   initPage();
 }
@@ -1492,11 +1497,28 @@ function getCollabMembers(){
 }
 
 // ═══ MEMBER HINT ═══
+// Admin new-borrow form: suggest member names, and fill the other fields when a member is picked/typed.
+function refreshMemberDatalist(){
+  const dl=document.getElementById('b-name-list');if(!dl)return;
+  dl.innerHTML=members.map(m=>`<option value="${escHtml(m.name)}">${escHtml([m.dept,m.sid].filter(Boolean).join(' '))}</option>`).join('');
+  const cb=document.getElementById('b-autofill');if(cb)cb.checked=uiPrefs.autoFillMember!==false;
+}
+async function setAutoFillPref(on){
+  uiPrefs.autoFillMember=!!on;
+  try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存設定失敗：'+e.message);}
+}
+function autoFillFromMember(m){
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||'';};
+  set('b-dept',m.dept);set('b-sid',m.sid);set('b-phone',m.phone);set('b-email',m.email);
+  // officer status may change which equipment is shown
+  if(document.getElementById('b-cat').value)renderEqList();
+}
 function onNameInput(val){
   const hint=document.getElementById('member-hint');
   if(!val.trim()){hint.style.display='none';return;}
   const m=members.find(x=>x.name===val.trim());
   if(!m){hint.style.display='none';return;}
+  if(uiPrefs.autoFillMember!==false)autoFillFromMember(m);
   const r=Math.max(0,Math.floor((m.taskCount||0)/redeemThreshold)-(m.redeemedCount||0));
   const roleLabel=m.isOfficer?'幹部':'社員';
   hint.style.display='block';
