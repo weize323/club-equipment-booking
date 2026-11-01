@@ -286,11 +286,11 @@ function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&
 // A reviewed-and-approved 個人借用 (practice borrow) uses up one redeem credit (redeemedCount +1);
 // deleting that record — or changing its category away from 個人借用 — gives the credit back.
 // rec.redeemCounted/redeemMemberId make this exactly reversible and never double-count.
-// Officers are exempt (their personal borrows follow task rules and never cost a credit).
+// Officers are counted the same as everyone else.
 function creditRedeem(rec){
   if(!rec||rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)return;
   const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
-  if(!mem||mem.isOfficer)return;
+  if(!mem)return;
   mem.redeemedCount=(mem.redeemedCount||0)+1;
   rec.redeemCounted=true;rec.redeemMemberId=mem.id;
 }
@@ -1201,6 +1201,14 @@ const server=http.createServer(async(req,res)=>{
       mem.phone=String(b.phone||'').trim();
       mem.email=String(b.email||'').trim();
       mem.isOfficer=!!b.isOfficer;
+      // Optional manual corrections (only applied when the field is present in the request)
+      for(const k of ['taskCount','redeemedCount']){
+        if(b[k]!==undefined&&b[k]!==null&&b[k]!==''){
+          const v=Number(b[k]);
+          if(!Number.isInteger(v)||v<0||v>9999)return json(res,400,{error:(k==='taskCount'?'場次':'已兌換次數')+'必須是 0 以上的整數'});
+          mem[k]=v;
+        }
+      }
 
       // Sync every historical record that matched the OLD identity so past borrow
       // records reflect the member's current name/dept/sid/phone instead of stale,
@@ -1289,7 +1297,6 @@ const server=http.createServer(async(req,res)=>{
         if(rec.status==='pending'){skipped.pending++;continue;}
         const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
         if(!mem){skipped.noMember++;continue;}
-        if(mem.isOfficer){skipped.officer++;continue;}
         plan.set(mem.id,{name:mem.name,add:((plan.get(mem.id)||{}).add||0)+1});
         if(!dry){mem.redeemedCount=(mem.redeemedCount||0)+1;rec.redeemCounted=true;rec.redeemMemberId=mem.id;}
       }

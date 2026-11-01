@@ -616,6 +616,15 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     </div>
     <label>Gmail</label><input type="email" id="m-email">
     <div class="err" id="err-m-name" style="display:none">請輸入姓名</div>
+    <div id="m-counts-box" style="display:none;margin-top:12px;padding:10px;background:#f9fafb;border-radius:8px">
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:6px">任務／兌換（可直接修改）</div>
+      <div class="inline-form" style="margin-top:0">
+        <div><label><span data-catname="task">社內任務</span>場次（累積）</label><input type="number" id="m-taskCount" min="0" max="9999"></div>
+        <div><label>已兌換次數</label><input type="number" id="m-redeemedCount" min="0" max="9999"></div>
+      </div>
+      <label>進度（0 ～ <span id="m-progress-max">2</span>）</label><input type="number" id="m-progress" min="0">
+      <p class="text-muted" style="margin-top:4px">進度＝場次除以規定次數的餘數；只改進度時，已累積的可兌換次數不變。可兌換次數＝場次÷規定次數 取整數，再減去已兌換次數。</p>
+    </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#374151;margin-top:12px">
       <input type="checkbox" id="m-isOfficer" style="width:auto">
       <span>幹部（<span data-catname="personal">個人借用</span>可借<span data-catname="task">社內任務</span>器材）</span>
@@ -2031,16 +2040,15 @@ function renderMembers(){
     const officerBtn=m.isOfficer
       ?`<button class="btn btn-sm btn-warn" onclick="setOfficer('${m.id}',false)">取消幹部</button>`
       :`<button class="btn btn-sm btn-purple" onclick="setOfficer('${m.id}',true)">設為幹部</button>`;
-    const edBtn=(fn,t)=>`<button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="${fn}('${m.id}')" title="${t}">✏️</button>`;
     const cells={
       name:`<td><strong>${escHtml(m.name)}</strong></td>`,
       dept:`<td>${escHtml(m.dept||'—')}</td>`,
       sid:`<td>${escHtml(m.sid||'—')}</td>`,
       role:`<td>${officerBadge}</td>`,
-      tasks:`<td>${tc} 場 ${edBtn('editTaskCount','直接修改場次')}</td>`,
-      redeemed:`<td>${redeemed} 次 ${edBtn('editRedeemedCount','直接修改已兌換次數')}</td>`,
+      tasks:`<td>${tc} 場</td>`,
+      redeemed:`<td>${redeemed} 次</td>`,
       avail:`<td>${avail>0?`<span style="color:#1d4ed8;font-weight:600">${avail} 次</span>`:'—'}</td>`,
-      progress:`<td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> ${edBtn('editTaskProgress','直接修改進度')}</td>`
+      progress:`<td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span></td>`
     };
     return`<tr draggable="true" data-id="${m.id}"
       ondragstart="memberDragStart(event,'${m.id}')"
@@ -2084,6 +2092,7 @@ async function memberDragDrop(e,targetId){
 }
 function openAddMember(){
   document.getElementById('modal-member-title').textContent='新增社員';
+  document.getElementById('m-counts-box').style.display='none';
   document.getElementById('m-id').value='';
   ['m-name','m-dept','m-sid','m-phone','m-email'].forEach(id=>document.getElementById(id).value='');
   const isOfficerEl=document.getElementById('m-isOfficer');
@@ -2097,6 +2106,14 @@ function openEditMember(id){
   ['name','dept','sid','phone','email'].forEach(k=>{const el=document.getElementById('m-'+k);if(el)el.value=m[k]||'';});
   const isOfficerEl=document.getElementById('m-isOfficer');
   if(isOfficerEl) isOfficerEl.checked=!!(m.isOfficer);
+  const T=redeemThreshold,tc=m.taskCount||0;
+  document.getElementById('m-counts-box').style.display='block';
+  document.getElementById('m-taskCount').value=tc;
+  document.getElementById('m-redeemedCount').value=m.redeemedCount||0;
+  document.getElementById('m-progress').value=tc%T;
+  document.getElementById('m-progress').dataset.orig=tc%T;
+  document.getElementById('m-taskCount').dataset.orig=tc;
+  document.getElementById('m-progress-max').textContent=T-1;
   document.getElementById('err-m-name').style.display='none';openModal('modal-member');
 }
 async function saveMember(){
@@ -2107,6 +2124,22 @@ async function saveMember(){
   const isOfficerEl=document.getElementById('m-isOfficer');
   const isOfficer=isOfficerEl?isOfficerEl.checked:false;
   const data={name,dept:document.getElementById('m-dept').value.trim(),sid:document.getElementById('m-sid').value.trim(),phone:document.getElementById('m-phone').value.trim(),email:document.getElementById('m-email').value.trim(),isOfficer};
+  if(id){
+    const T=redeemThreshold;
+    const tcEl=document.getElementById('m-taskCount'),rdEl=document.getElementById('m-redeemedCount'),pgEl=document.getElementById('m-progress');
+    let tc=Number(tcEl.value),rd=Number(rdEl.value),pg=Number(pgEl.value);
+    if(tcEl.value===''||!Number.isInteger(tc)||tc<0||rdEl.value===''||!Number.isInteger(rd)||rd<0){
+      document.getElementById('err-m-name').textContent='場次與已兌換次數必須是 0 以上的整數';document.getElementById('err-m-name').style.display='block';return;
+    }
+    // 進度 edited while 場次 untouched → rebuild 場次 from (already-earned redeems × 規定次數 + 進度)
+    if(String(pgEl.value)!==pgEl.dataset.orig&&String(tcEl.value)===tcEl.dataset.orig){
+      if(pgEl.value===''||!Number.isInteger(pg)||pg<0||pg>=T){
+        document.getElementById('err-m-name').textContent=`進度必須是 0～${T-1} 的整數`;document.getElementById('err-m-name').style.display='block';return;
+      }
+      tc=Math.floor(Number(tcEl.dataset.orig)/T)*T+pg;
+    }
+    data.taskCount=tc;data.redeemedCount=rd;
+  }
   try{
     if(id){
       const d=await api(`/api/admin/members/${id}`,{method:'PUT',body:JSON.stringify(data)});
@@ -2181,9 +2214,9 @@ async function backfillRedeem(){
   try{
     const pre=await api('/api/admin/backfill-redeem',{method:'POST',body:JSON.stringify({dryRun:true})});
     const sk=pre.skipped||{};
-    if(!pre.changes.length){alert(`沒有需要補算的${catLabel('personal')}紀錄。`+(sk.officer||sk.noMember||sk.pending?`\n（略過：幹部 ${sk.officer||0} 筆、找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）`:''));return;}
+    if(!pre.changes.length){alert(`沒有需要補算的${catLabel('personal')}紀錄。`+(sk.noMember||sk.pending?`\n（略過：找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）`:''));return;}
     const lines=pre.changes.map(c=>`・${c.name}：已兌換 +${c.add}`).join('\n');
-    if(!confirm(`將把已審核通過的${catLabel('personal')}紀錄補算進「已兌換」：\n\n${lines}\n\n（略過：幹部 ${sk.officer||0} 筆、找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）\n\n⚠️ 如果你之前已經手動把某人的「已兌換」填過，會重複計算。確定要補算嗎？`))return;
+    if(!confirm(`將把已審核通過的${catLabel('personal')}紀錄補算進「已兌換」：\n\n${lines}\n\n（略過：找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）\n\n⚠️ 如果你之前已經手動把某人的「已兌換」填過，會重複計算。確定要補算嗎？`))return;
     const d=await api('/api/admin/backfill-redeem',{method:'POST',body:JSON.stringify({dryRun:false})});
     members=d.members||members;renderMembers();
     alert(`已補算完成，共 ${d.changes.reduce((n,c)=>n+c.add,0)} 筆。每筆紀錄只會算一次，重複按不會重複加。`);
