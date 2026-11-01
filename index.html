@@ -440,7 +440,7 @@ function onUCatChange(){
   const rn=document.getElementById('ub-redeem-notice');
   if(cat==='personal'){
     const nm=id=>{const c=pubCategories.find(z=>z.id===id);return c?c.name:id;};
-    rn.textContent=(pubPlaceholders.redeemNotice||'').trim()||`完成 ${pubRedeemThreshold} 場${nm('task')}可兌換 1 次${nm('personal')}資格，兌換後扣除 ${pubRedeemThreshold} 場。`;
+    rn.textContent=(pubPlaceholders.redeemNotice||'').trim()||`完成 ${pubRedeemThreshold} 場${nm('task')}可兌換 1 次${nm('personal')}資格，場次會持續累積（兌換不會扣除場次）。`;
     rn.style.display='block';
   }else rn.style.display='none';
   renderUEqList();renderUSelected();
@@ -715,10 +715,10 @@ function refreshMemberHint(){
       if(!d.ok){hint.style.display='none';return;}
       const T=d.redeemThreshold||pubRedeemThreshold||3;
       const tc=d.taskCount||0;
-      const r=Math.floor(tc/T);
+      const r=Math.max(0,Math.floor(tc/T)-(d.redeemedCount||0));
       const roleLabel=d.isOfficer?'幹部':'社員';
       hint.style.display='block';
-      document.getElementById('ub-member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${tc}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(T,10)},(_,i)=>`<span class="token${(tc%T)>i?' filled':''}"></span>`).join('')}</span></div>`;
+      document.getElementById('ub-member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${tc}</strong> 場 · 已兌換 <strong>${d.redeemedCount||0}</strong> 次 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(T,10)},(_,i)=>`<span class="token${(tc%T)>i?' filled':''}"></span>`).join('')}</span></div>`;
     }catch{
       hint.style.display='none';
     }

@@ -283,6 +283,7 @@ function writeDB(d){
 
 // Number of 社內任務 sessions needed for 1 redeem (admin-configurable, default 3).
 function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&&n<=99)?n:3;}
+function redeemAvailable(mem){const T=getThreshold();return Math.max(0,Math.floor((mem.taskCount||0)/T)-(mem.redeemedCount||0));}
 function ensureEqTypes(){ if(!db.eqTypes) db.eqTypes=[...new Set([...DEFAULT_CAT_ORDER,...(db.catOrder||[]),...(db.equipment||[]).map(e=>e.type).filter(Boolean)])]; }
 let db=readDB();
 
@@ -685,7 +686,7 @@ const server=http.createServer(async(req,res)=>{
     if(m==='GET'&&p==='/api/admin/state'){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       ensureEqTypes();
-      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes,redeemThreshold:getThreshold()});
+      return json(res,200,{records:db.records,members:db.members,equipment:db.equipment,emailSettings:db.emailSettings,placeholders:db.placeholders,locations:db.locations,catOrder:db.catOrder,categories:db.categories,eqTypes:db.eqTypes,redeemThreshold:getThreshold(),uiPrefs:db.uiPrefs||{}});
     }
 
     // ── Admin bulk update any top-level key ──
@@ -698,7 +699,8 @@ const server=http.createServer(async(req,res)=>{
       // which reads and writes exactly one record — never the whole array. This
       // generic bulk endpoint can therefore no longer be used, accidentally or
       // otherwise, to overwrite the entire records collection with a stale copy.
-      const allowed=['members','equipment','emailSettings','placeholders','locations','catOrder'];
+      const allowed=['members','equipment','emailSettings','placeholders','locations','catOrder','uiPrefs'];
+      if(key==='uiPrefs'&&(typeof b.value!=='object'||b.value===null||Array.isArray(b.value)))return json(res,400,{error:'格式錯誤'});
       if(!allowed.includes(key))return json(res,400,{error:'不允許的欄位'});
       db[key]=b.value;writeDB(db);return json(res,200,{ok:true});
     }
@@ -1254,15 +1256,33 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{ok:true,redeemThreshold:v});
     }
 
+    // ── Admin: set / adjust how many times a member has already redeemed ──
+    if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/redeemed$/)){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const memId=p.split('/')[4];
+      const b=await bodyJSON(req);
+      const mem=db.members.find(x=>x.id===memId);
+      if(!mem)return json(res,404,{error:'社員不存在'});
+      if(b.set!==undefined&&b.set!==null&&b.set!==''){
+        const v=Number(b.set);
+        if(!Number.isInteger(v)||v<0||v>9999)return json(res,400,{error:'已兌換次數必須是 0 以上的整數'});
+        mem.redeemedCount=v;
+      }else{
+        mem.redeemedCount=Math.max(0,(mem.redeemedCount||0)+(Number(b.delta)||0));
+      }
+      writeDB(db);
+      return json(res,200,{ok:true,member:mem});
+    }
+
     // ── Admin: redeem task-count for 1 personal-borrow credit, for one member ──
     if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/redeem$/)){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       const memId=p.split('/')[4];
       const mem=db.members.find(x=>x.id===memId);
       if(!mem)return json(res,404,{error:'社員不存在'});
-      const T=getThreshold();
-      if((mem.taskCount||0)<T)return json(res,400,{error:`任務場次不足 ${T} 場，無法兌換`});
-      mem.taskCount-=T;
+      // Sessions keep accumulating — redeeming only increments redeemedCount (never deducts taskCount).
+      if(redeemAvailable(mem)<=0)return json(res,400,{error:`目前沒有可兌換的次數（每 ${getThreshold()} 場可兌換 1 次）`});
+      mem.redeemedCount=(mem.redeemedCount||0)+1;
       writeDB(db);
       return json(res,200,{ok:true,member:mem});
     }
@@ -1375,8 +1395,8 @@ const server=http.createServer(async(req,res)=>{
       const name=String(b.name||'').trim(),sid=String(b.sid||'').trim(),phone=String(b.phone||'').trim();
       const member=db.members.find(x=>x.name===name&&x.sid===sid&&x.phone===phone);
       const recs=db.records.filter(r=>r.name===name&&r.sid===sid&&r.phone===phone);
-      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false,taskCount:0,redeemThreshold:getThreshold()});
-      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer),taskCount:(member&&member.taskCount)||0,redeemThreshold:getThreshold()});
+      if(!member&&!recs.length)return json(res,200,{ok:false,records:[],isOfficer:false,taskCount:0,redeemedCount:0,redeemThreshold:getThreshold()});
+      return json(res,200,{ok:true,records:recs,isOfficer:!!(member&&member.isOfficer),taskCount:(member&&member.taskCount)||0,redeemedCount:(member&&member.redeemedCount)||0,redeemThreshold:getThreshold()});
     }
 
     // ── Admin import legacy ──

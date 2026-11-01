@@ -388,12 +388,16 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
 <div class="page" id="page-members">
   <div class="section-header"><h2>社員管理</h2><button class="btn btn-primary" onclick="openAddMember()">新增社員</button></div>
   <div class="card" style="margin-bottom:10px">
-    <p class="text-muted">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <p class="text-muted" style="margin:0">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
+      <button type="button" class="btn btn-sm" onclick="toggleMemberColPanel()">⚙️ 顯示欄位</button>
+    </div>
+    <div id="member-col-panel" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0"></div>
   </div>
   <div class="card">
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th style="width:28px"></th><th>姓名</th><th>系級</th><th>學號</th><th>身分</th><th data-catname="task">社內任務</th><th>可兌換</th><th>進度 <button type="button" class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editRedeemThreshold()" title="修改規定次數">✏️ 規定次數</button></th><th>操作</th></tr></thead>
+        <thead id="members-head"></thead>
         <tbody id="members-body"></tbody>
       </table>
     </div>
@@ -828,7 +832,7 @@ async function apiPut(key,value){
 }
 
 // ═══ STATE (in-memory only, loaded from server) ═══
-let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[],eqTypes=[],redeemThreshold=3;
+let records=[],members=[],equipment=[],emailSettings={},placeholders={},locations=[],catOrder=[],categories=[],eqTypes=[],redeemThreshold=3,uiPrefs={};
 
 const TZ='Asia/Taipei';
 function nowTW(){return new Date(new Date().toLocaleString('en-US',{timeZone:TZ}))}
@@ -1077,7 +1081,7 @@ async function loadAdminState(){
   const d=await api('/api/admin/state');
   records=d.records||[];members=d.members||[];equipment=d.equipment||[];
   emailSettings=d.emailSettings||{};placeholders=d.placeholders||{};
-  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];redeemThreshold=d.redeemThreshold||3;
+  locations=d.locations||[];catOrder=d.catOrder||[];categories=d.categories||[];eqTypes=d.eqTypes||[];redeemThreshold=d.redeemThreshold||3;uiPrefs=d.uiPrefs||{};
   renderCatDropdowns();renderEqTypeOptions();renderEqTypeTabs();
   initPage();
 }
@@ -1129,7 +1133,7 @@ async function loadPublicPlaceholders(){
 }
 
 // ═══ 任務兌換說明 (editable; shown here and on the member form for the 個人借用 category) ═══
-function defaultRedeemNotice(){return `完成 ${redeemThreshold} 場${catLabel('task')}可兌換 1 次${catLabel('personal')}資格，兌換後扣除 ${redeemThreshold} 場。`;}
+function defaultRedeemNotice(){return `完成 ${redeemThreshold} 場${catLabel('task')}可兌換 1 次${catLabel('personal')}資格，場次會持續累積（兌換不會扣除場次）。`;}
 function renderRedeemNotice(){
   const el=document.getElementById('redeem-notice-text');
   if(el)el.textContent=(placeholders.redeemNotice||'').trim()||defaultRedeemNotice();
@@ -1151,7 +1155,7 @@ async function saveRedeemThreshold(){
   const v=parseInt(document.getElementById('redeem-threshold-input').value,10);
   if(!(v>=1&&v<=99)){alert('規定場次必須是 1～99 的整數');return;}
   if(v===redeemThreshold)return;
-  if(!confirm(`把規定場次改成 ${v} 場？所有社員的「可兌換／進度」會依新規定重新計算（場次本身不變）。`))return;
+  if(!confirm(`把規定場次改成 ${v} 場？所有社員的「可兌換／進度」會依新規定重新計算（場次與已兌換次數不變）。`))return;
   try{
     const d=await api('/api/admin/redeem-threshold',{method:'POST',body:JSON.stringify({value:v})});
     redeemThreshold=d.redeemThreshold;
@@ -1483,10 +1487,10 @@ function onNameInput(val){
   if(!val.trim()){hint.style.display='none';return;}
   const m=members.find(x=>x.name===val.trim());
   if(!m){hint.style.display='none';return;}
-  const r=Math.floor((m.taskCount||0)/redeemThreshold);
+  const r=Math.max(0,Math.floor((m.taskCount||0)/redeemThreshold)-(m.redeemedCount||0));
   const roleLabel=m.isOfficer?'幹部':'社員';
   hint.style.display='block';
-  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${m.taskCount||0}</strong> 場 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(redeemThreshold,10)},(_,i)=>`<span class="token${((m.taskCount||0)%redeemThreshold)>i?' filled':''}"></span>`).join('')}</span></div>`;
+  document.getElementById('member-info-box').innerHTML=`<div class="hint-box">${roleLabel} · 任務 <strong>${m.taskCount||0}</strong> 場 · 已兌換 <strong>${m.redeemedCount||0}</strong> 次 · 可兌換 <strong>${r}</strong> 次 <span class="token-bar">${Array.from({length:Math.min(redeemThreshold,10)},(_,i)=>`<span class="token${((m.taskCount||0)%redeemThreshold)>i?' filled':''}"></span>`).join('')}</span></div>`;
 }
 
 // ═══ SUBMIT BORROW ═══
@@ -1990,41 +1994,67 @@ function memberTaskRecords(m){
   }).map(r=>({r,role:(r.name===m.name||(m.sid&&r.sid===m.sid))?'主借':'共同'}));
 }
 function memberTaskLabel(t){return (t.r.taskName||'').trim()||'（未填任務名稱）';}
+// Member-table columns the admin can show/hide (saved server-side in uiPrefs.memberHiddenCols).
+const MEMBER_COLS=[['name','姓名'],['dept','系級'],['sid','學號'],['role','身分'],['tasks','場次（累積）'],['redeemed','已兌換'],['avail','可兌換'],['progress','進度']];
+function memberColHidden(id){return (uiPrefs.memberHiddenCols||[]).includes(id);}
+function toggleMemberColPanel(){
+  const p=document.getElementById('member-col-panel');
+  const open=p.style.display==='none';
+  p.style.display=open?'block':'none';
+  if(open)p.innerHTML='<span class="text-muted" style="font-size:12px">勾選要顯示的欄位：</span> '+MEMBER_COLS.map(([id,label])=>
+    `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 12px 4px 0;font-size:12px;color:#374151"><input type="checkbox" style="width:auto" ${memberColHidden(id)?'':'checked'} onchange="setMemberCol('${id}',this.checked)"> ${label}</label>`).join('');
+}
+async function setMemberCol(id,show){
+  const hidden=new Set(uiPrefs.memberHiddenCols||[]);
+  if(show)hidden.delete(id);else hidden.add(id);
+  uiPrefs.memberHiddenCols=[...hidden];
+  renderMembers();
+  try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存顯示設定失敗：'+e.message);}
+}
 function renderMembers(){
   const tbody=document.getElementById('members-body');
+  const labels={name:'姓名',dept:'系級',sid:'學號',role:'身分',tasks:catLabel('task')+'場次（累積）',redeemed:'已兌換',avail:'可兌換',
+    progress:'進度 <button type="button" class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editRedeemThreshold()" title="修改規定次數">✏️ 規定次數</button>'};
+  document.getElementById('members-head').innerHTML='<tr><th style="width:28px"></th>'+
+    MEMBER_COLS.filter(([id])=>!memberColHidden(id)).map(([id])=>`<th>${labels[id]}</th>`).join('')+'<th>操作</th></tr>';
   document.getElementById('members-empty').style.display=members.length?'none':'block';
   if(!members.length){tbody.innerHTML='';return;}
   tbody.innerHTML=members.map(m=>{
-    const T=redeemThreshold,tc=m.taskCount||0,r=Math.floor(tc/T),prog=tc%T;
+    const T=redeemThreshold,tc=m.taskCount||0,earned=Math.floor(tc/T),prog=tc%T;
+    const redeemed=m.redeemedCount||0,avail=Math.max(0,earned-redeemed);
     const officerBadge=m.isOfficer
       ?`<span class="badge-officer">幹部</span>`
       :`<span class="badge-normal">一般</span>`;
     const officerBtn=m.isOfficer
       ?`<button class="btn btn-sm btn-warn" onclick="setOfficer('${m.id}',false)">取消幹部</button>`
       :`<button class="btn btn-sm btn-purple" onclick="setOfficer('${m.id}',true)">設為幹部</button>`;
+    const edBtn=(fn,t)=>`<button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="${fn}('${m.id}')" title="${t}">✏️</button>`;
+    const cells={
+      name:`<td><strong>${escHtml(m.name)}</strong></td>`,
+      dept:`<td>${escHtml(m.dept||'—')}</td>`,
+      sid:`<td>${escHtml(m.sid||'—')}</td>`,
+      role:`<td>${officerBadge}</td>`,
+      tasks:`<td>${tc} 場 ${edBtn('editTaskCount','直接修改場次')}</td>`,
+      redeemed:`<td>${redeemed} 次 ${edBtn('editRedeemedCount','直接修改已兌換次數')}</td>`,
+      avail:`<td>${avail>0?`<span style="color:#1d4ed8;font-weight:600">${avail} 次</span>`:'—'}</td>`,
+      progress:`<td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> ${edBtn('editTaskProgress','直接修改進度')}</td>`
+    };
     return`<tr draggable="true" data-id="${m.id}"
       ondragstart="memberDragStart(event,'${m.id}')"
       ondragover="memberDragOver(event,'${m.id}')"
       ondrop="memberDragDrop(event,'${m.id}')"
       ondragleave="memberDragLeave(event)">
       <td><span class="drag-handle">☰</span></td>
-      <td><strong>${m.name}</strong></td><td>${m.dept||'—'}</td><td>${m.sid||'—'}</td>
-      <td>${officerBadge}</td>
-      <td style="max-width:230px">${tc} 場 <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskCount('${m.id}')" title="直接修改場次">✏️</button>${(()=>{
-        const ts=memberTaskRecords(m);if(!ts.length)return '';
-        const shown=ts.slice(0,3).map(t=>`<div style="font-size:11px;color:#374151;margin-top:3px">🎬 ${escHtml(memberTaskLabel(t))}${t.role==='共同'?' <span style="color:#1d4ed8">（共同）</span>':''}</div>`).join('');
-        const more=ts.length>3?`<div style="font-size:11px;margin-top:3px"><a href="#" style="color:#1d4ed8" onclick="viewMemberDetail('${m.id}');return false">…還有 ${ts.length-3} 筆，查看全部</a></div>`:'';
-        return shown+more;})()}</td>
-      <td>${r>0?`<span style="color:#1d4ed8;font-weight:600">${r} 次</span>`:'—'}</td>
-      <td>${T<=10?`<span class="token-bar">${Array.from({length:T},(_,i)=>`<span class="token${prog>i?' filled':''}"></span>`).join('')}</span> `:''}<span style="cursor:pointer" onclick="editRedeemThreshold()" title="點一下修改規定次數">${prog}/${T}</span> <button class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editTaskProgress('${m.id}')" title="直接修改進度">✏️</button></td>
+      ${MEMBER_COLS.filter(([id])=>!memberColHidden(id)).map(([id])=>cells[id]).join('')}
       <td>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           ${officerBtn}
           <button class="btn btn-sm" onclick="addTask('${m.id}')">+任務</button>
           <button class="btn btn-sm btn-danger" onclick="removeTask('${m.id}')">−任務</button>
-          ${r>0?`<button class="btn btn-sm btn-purple" onclick="redeemTask('${m.id}')">兌換</button>`:''}
+          ${avail>0?`<button class="btn btn-sm btn-purple" onclick="redeemTask('${m.id}')">兌換</button>`:''}
+          ${redeemed>0?`<button class="btn btn-sm" onclick="undoRedeem('${m.id}')" title="把已兌換次數 −1（點錯時使用）">取消兌換</button>`:''}
           <button class="btn btn-sm" onclick="openEditMember('${m.id}')">編輯</button>
-          <button class="btn btn-sm" onclick="viewMemberDetail('${m.id}')">紀錄</button>
+          <button class="btn btn-sm" onclick="viewMemberDetail('${m.id}')">任務／紀錄</button>
           <button class="btn btn-sm btn-danger" onclick="delMember('${m.id}')">刪除</button>
         </div>
       </td>
@@ -2134,14 +2164,33 @@ async function removeTask(id){
   }catch(e){alert('操作失敗：'+e.message);}
 }
 async function redeemTask(id){
-  const m=members.find(x=>x.id===id);if(!m||(m.taskCount||0)<redeemThreshold)return;
-  if(!confirm(`幫 ${m.name} 兌換 1 次${catLabel('personal')}？（扣 ${redeemThreshold} 場）`))return;
+  const m=members.find(x=>x.id===id);if(!m)return;
+  if(!confirm(`幫 ${m.name} 兌換 1 次${catLabel('personal')}？（場次會繼續累積，不會扣除）`))return;
   try{
     const d=await api(`/api/admin/members/${id}/redeem`,{method:'POST'});
     const idx=members.findIndex(x=>x.id===id);
     if(idx>=0)members[idx]=d.member;
-    renderMembers();alert(`兌換成功！剩餘 ${d.member.taskCount} 場`);
+    renderMembers();
   }catch(e){alert('兌換失敗：'+e.message);}
+}
+async function setRedeemedCount(id,body){
+  const d=await api(`/api/admin/members/${id}/redeemed`,{method:'POST',body:JSON.stringify(body)});
+  const idx=members.findIndex(x=>x.id===id);
+  if(idx>=0)members[idx]=d.member;
+  renderMembers();
+}
+async function undoRedeem(id){
+  const m=members.find(x=>x.id===id);if(!m||!(m.redeemedCount>0))return;
+  if(!confirm(`取消 ${m.name} 的 1 次兌換？（已兌換次數 −1）`))return;
+  try{await setRedeemedCount(id,{delta:-1});}catch(e){alert('操作失敗：'+e.message);}
+}
+async function editRedeemedCount(id){
+  const m=members.find(x=>x.id===id);if(!m)return;
+  const v=prompt(`修改 ${m.name} 的已兌換次數（目前 ${m.redeemedCount||0} 次）：`,m.redeemedCount||0);
+  if(v===null)return;
+  const n=Number(String(v).trim());
+  if(String(v).trim()===''||!Number.isInteger(n)||n<0){alert('請輸入 0 以上的整數');return;}
+  try{await setRedeemedCount(id,{set:n});}catch(e){alert('修改失敗：'+e.message);}
 }
 async function delMember(id){
   if(!confirm('確定刪除？'))return;
