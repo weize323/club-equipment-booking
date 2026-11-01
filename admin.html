@@ -1766,8 +1766,9 @@ async function toggleReturnItem(el){
 async function deleteRecord(id){
   if(!confirm('確定刪除？'))return;
   try{
-    await api(`/api/admin/records/${id}`,{method:'DELETE'});
+    const d=await api(`/api/admin/records/${id}`,{method:'DELETE'});
     records=records.filter(x=>x.id!==id);
+    if(d&&Array.isArray(d.members))members=d.members;
     renderRecords();
   }catch(e){alert('刪除失敗：'+e.message);}
 }
@@ -1877,9 +1878,10 @@ async function approveBorrow(){
     const d=await api(`/api/admin/records/${approveTargetId}/approve`,{method:'POST'});
     const idx=records.findIndex(x=>x.id===approveTargetId);
     if(idx>=0)records[idx]=d.record;
+    const hadServerMembers=Array.isArray(d.members);if(hadServerMembers)members=d.members;
     // Server already applied the task-count bump authoritatively; mirror it locally
     // for this browser's own immediate display only (not sent back anywhere).
-    if(r.cat==='task'){
+    if(r.cat==='task'&&!hadServerMembers){
       const mem=members.find(x=>x.sid===r.sid||x.name===r.name);
       if(mem)mem.taskCount=(mem.taskCount||0)+1;
     }

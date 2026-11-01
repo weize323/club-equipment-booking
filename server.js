@@ -283,6 +283,23 @@ function writeDB(d){
 
 // Number of 社內任務 sessions needed for 1 redeem (admin-configurable, default 3).
 function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&&n<=99)?n:3;}
+// A reviewed-and-approved 個人借用 (practice borrow) uses up one redeem credit (redeemedCount +1);
+// deleting that record — or changing its category away from 個人借用 — gives the credit back.
+// rec.redeemCounted/redeemMemberId make this exactly reversible and never double-count.
+// Officers are exempt (their personal borrows follow task rules and never cost a credit).
+function creditRedeem(rec){
+  if(!rec||rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)return;
+  const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
+  if(!mem||mem.isOfficer)return;
+  mem.redeemedCount=(mem.redeemedCount||0)+1;
+  rec.redeemCounted=true;rec.redeemMemberId=mem.id;
+}
+function refundRedeem(rec){
+  if(!rec||!rec.redeemCounted)return;
+  const mem=db.members.find(x=>x.id===rec.redeemMemberId);
+  if(mem)mem.redeemedCount=Math.max(0,(mem.redeemedCount||0)-1);
+  rec.redeemCounted=false;delete rec.redeemMemberId;
+}
 function redeemAvailable(mem){const T=getThreshold();return Math.max(0,Math.floor((mem.taskCount||0)/T)-(mem.redeemedCount||0));}
 function ensureEqTypes(){ if(!db.eqTypes) db.eqTypes=[...new Set([...DEFAULT_CAT_ORDER,...(db.catOrder||[]),...(db.equipment||[]).map(e=>e.type).filter(Boolean)])]; }
 let db=readDB();
@@ -886,6 +903,7 @@ const server=http.createServer(async(req,res)=>{
         }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
       }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
       db.records[idx]=updated;
+      if(updated.status!=='pending'){ if(updated.cat==='personal')creditRedeem(updated); else refundRedeem(updated); }
       // Keep collaborators' 社內任務 counts consistent with the submit rule (+1 per collaborator on a
       // task record): newly added collaborators get +1, removed ones -1 (never below 0).
       {
@@ -969,8 +987,9 @@ const server=http.createServer(async(req,res)=>{
         const mem=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
         if(mem) mem.taskCount=(mem.taskCount||0)+1;
       }
+      creditRedeem(rec);
       writeDB(db);
-      return json(res,200,{ok:true,record:rec});
+      return json(res,200,{ok:true,record:rec,members:db.members});
     }
 
     // ── Admin: reject (delete) a single pending record by id ──
@@ -979,6 +998,7 @@ const server=http.createServer(async(req,res)=>{
       const recId=p.split('/')[4];
       const idx=db.records.findIndex(r=>r.id===recId);
       if(idx===-1)return json(res,404,{error:'紀錄不存在'});
+      refundRedeem(db.records[idx]);
       db.records.splice(idx,1);
       writeDB(db);
       return json(res,200,{ok:true,deletedId:recId});
@@ -990,9 +1010,10 @@ const server=http.createServer(async(req,res)=>{
       const recId=p.split('/')[4];
       const idx=db.records.findIndex(r=>r.id===recId);
       if(idx===-1)return json(res,404,{error:'紀錄不存在'});
-      db.records.splice(idx,1);
+      const removed=db.records.splice(idx,1)[0];
+      refundRedeem(removed);
       writeDB(db);
-      return json(res,200,{ok:true,deletedId:recId});
+      return json(res,200,{ok:true,deletedId:recId,members:db.members});
     }
 
     // ── Admin: register full or partial return for a single record by id ──
