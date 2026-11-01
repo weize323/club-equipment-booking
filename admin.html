@@ -390,7 +390,8 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
   <div class="card" style="margin-bottom:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <p class="text-muted" style="margin:0">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
-      <button type="button" class="btn btn-sm" onclick="toggleMemberColPanel()">⚙️ 顯示欄位</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="backfillRedeem()">🔄 補算舊的練習借用</button>
+      <button type="button" class="btn btn-sm" onclick="toggleMemberColPanel()">⚙️ 顯示欄位</button></div>
     </div>
     <div id="member-col-panel" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0"></div>
   </div>
@@ -2174,6 +2175,19 @@ async function redeemTask(id){
     if(idx>=0)members[idx]=d.member;
     renderMembers();
   }catch(e){alert('兌換失敗：'+e.message);}
+}
+// One-off: count already-approved practice borrows (made before auto-counting) into 已兌換.
+async function backfillRedeem(){
+  try{
+    const pre=await api('/api/admin/backfill-redeem',{method:'POST',body:JSON.stringify({dryRun:true})});
+    const sk=pre.skipped||{};
+    if(!pre.changes.length){alert(`沒有需要補算的${catLabel('personal')}紀錄。`+(sk.officer||sk.noMember||sk.pending?`\n（略過：幹部 ${sk.officer||0} 筆、找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）`:''));return;}
+    const lines=pre.changes.map(c=>`・${c.name}：已兌換 +${c.add}`).join('\n');
+    if(!confirm(`將把已審核通過的${catLabel('personal')}紀錄補算進「已兌換」：\n\n${lines}\n\n（略過：幹部 ${sk.officer||0} 筆、找不到社員 ${sk.noMember||0} 筆、審核中 ${sk.pending||0} 筆）\n\n⚠️ 如果你之前已經手動把某人的「已兌換」填過，會重複計算。確定要補算嗎？`))return;
+    const d=await api('/api/admin/backfill-redeem',{method:'POST',body:JSON.stringify({dryRun:false})});
+    members=d.members||members;renderMembers();
+    alert(`已補算完成，共 ${d.changes.reduce((n,c)=>n+c.add,0)} 筆。每筆紀錄只會算一次，重複按不會重複加。`);
+  }catch(e){alert('補算失敗：'+e.message);}
 }
 async function setRedeemedCount(id,body){
   const d=await api(`/api/admin/members/${id}/redeemed`,{method:'POST',body:JSON.stringify(body)});

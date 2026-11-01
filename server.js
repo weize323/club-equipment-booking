@@ -1277,6 +1277,26 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{ok:true,redeemThreshold:v});
     }
 
+    // ── Admin: one-off backfill — count already-approved 個人借用 records (made before auto-counting
+    //    existed) into each member's redeemedCount. Idempotent via rec.redeemCounted; dryRun previews only. ──
+    if(m==='POST'&&p==='/api/admin/backfill-redeem'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const dry=b.dryRun!==false;
+      const plan=new Map();let skipped={officer:0,noMember:0,pending:0};
+      for(const rec of db.records){
+        if(rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)continue;
+        if(rec.status==='pending'){skipped.pending++;continue;}
+        const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
+        if(!mem){skipped.noMember++;continue;}
+        if(mem.isOfficer){skipped.officer++;continue;}
+        plan.set(mem.id,{name:mem.name,add:((plan.get(mem.id)||{}).add||0)+1});
+        if(!dry){mem.redeemedCount=(mem.redeemedCount||0)+1;rec.redeemCounted=true;rec.redeemMemberId=mem.id;}
+      }
+      if(!dry)writeDB(db);
+      return json(res,200,{ok:true,dryRun:dry,changes:[...plan.values()],skipped,members:db.members});
+    }
+
     // ── Admin: set / adjust how many times a member has already redeemed ──
     if(m==='POST'&&p.match(/^\/api\/admin\/members\/[^/]+\/redeemed$/)){
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
