@@ -1486,9 +1486,16 @@ function openEqSchedule(eqId){
 function addCollabRow(){
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
-  div.innerHTML=`<input type="text" placeholder="${phText('collabName')}" style="flex:1"><input type="text" placeholder="${phText('collabSid')}" style="flex:1">
+  div.innerHTML=`<input type="text" placeholder="${phText('collabName')}" style="flex:1" list="b-name-list" autocomplete="off" onfocus="refreshMemberDatalist()" oninput="collabNameInput(this)"><input type="text" placeholder="${phText('collabSid')}" style="flex:1">
     <button class="btn btn-sm btn-danger" onclick="this.parentNode.remove()">✕</button>`;
   document.getElementById('collab-list').appendChild(div);
+}
+function collabNameInput(inp){
+  if(uiPrefs.autoFillMember===false)return;
+  const m=members.find(x=>x.name===inp.value.trim());
+  if(!m)return;
+  const sid=inp.parentNode.querySelector('input:nth-of-type(2)');
+  if(sid&&m.sid)sid.value=m.sid;
 }
 function getCollabMembers(){
   return[...document.getElementById('collab-list').children].map(r=>{
@@ -3123,7 +3130,7 @@ function fmtDTLfromISO(s){
 function erAddCollabRow(name,sid){
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
-  div.innerHTML=`<input type="text" class="er-collab-name" placeholder="${phText('collabName')}" style="flex:1"><input type="text" class="er-collab-sid" placeholder="${phText('collabSid')}" style="flex:1">
+  div.innerHTML=`<input type="text" class="er-collab-name" placeholder="${phText('collabName')}" style="flex:1" list="b-name-list" autocomplete="off" onfocus="refreshMemberDatalist()" oninput="collabNameInput(this)"><input type="text" class="er-collab-sid" placeholder="${phText('collabSid')}" style="flex:1">
     <button type="button" class="btn btn-sm btn-danger" onclick="this.parentNode.remove()">✕</button>`;
   div.querySelector('.er-collab-name').value=name||'';
   div.querySelector('.er-collab-sid').value=sid||'';
