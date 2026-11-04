@@ -631,6 +631,18 @@ const server=http.createServer(async(req,res)=>{
       return json(res,200,{categories:(db.categories||[]).filter(c=>!c.adminOnly)});
     }
 
+    // ── Officer-only: name suggestions for collaborator rows ──
+    // Caller must prove officer status (exact name+sid+phone). Returns at most 8 members whose
+    // name starts with / contains the query, and ONLY {name,sid} — never phone/email/dept.
+    if(m==='POST'&&p==='/api/member/officer-collab-suggest'){
+      const b=await bodyJSON(req);
+      const name=String(b.name||'').trim(),sid=String(b.sid||'').trim(),phone=String(b.phone||'').trim();
+      const q=String(b.q||'').trim();
+      if(!name||!sid||!phone||!q||!checkOfficer(name,sid,phone))return json(res,200,{ok:true,list:[]});
+      const list=(db.members||[]).filter(x=>x.name&&x.name.includes(q)).slice(0,8).map(x=>({name:x.name,sid:x.sid||''}));
+      return json(res,200,{ok:true,list});
+    }
+
     // ── Public: check if a specific person (by exact name+sid+phone match) is an officer ──
     // Returns ONLY a boolean — never the officer roster, never any member's stored data.
     if(m==='POST'&&p==='/api/member/check-officer'){

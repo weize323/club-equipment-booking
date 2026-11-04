@@ -105,7 +105,7 @@ input:focus,select:focus{border-color:#3b82f6}
           <span style="font-size:12px;font-weight:600">共同拍攝成員</span>
           <button class="btn btn-sm btn-outline" onclick="addUCollabRow()">+ 新增</button>
         </div>
-        <div id="ub-collab-list"></div>
+        <div id="ub-collab-list"></div><datalist id="ub-collab-dl"></datalist>
         <p style="font-size:11px;color:#94a3b8;margin-top:3px">共同成員各 +1 次<span data-catname="task">社內任務</span>場次</p>
       </div>
     </div>
@@ -630,9 +630,30 @@ function setUCard(eqId,idx,val){
 function addUCollabRow(){
   const div=document.createElement('div');
   div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:5px';
-  div.innerHTML=`<input type="text" placeholder="${(window._phCollab||{name:'姓名'}).name}" style="flex:1"><input type="text" placeholder="${(window._phCollab||{sid:'學號'}).sid}" style="flex:1">
+  div.innerHTML=`<input type="text" placeholder="${(window._phCollab||{name:'姓名'}).name}" style="flex:1" list="ub-collab-dl" autocomplete="off" oninput="uCollabNameInput(this)"><input type="text" placeholder="${(window._phCollab||{sid:'學號'}).sid}" style="flex:1">
     <button class="btn btn-sm" style="width:auto;background:#fff;border:1.5px solid #fca5a5;color:#dc2626" onclick="this.parentNode.remove()">✕</button>`;
   document.getElementById('ub-collab-list').appendChild(div);
+}
+// Officer-only: suggest member names for collaborator rows and auto-fill their student id.
+// Ordinary members get nothing (server also refuses non-officers).
+let _uCollabTimer=null,_uCollabList=[];
+function uCollabNameInput(inp){
+  const v=inp.value.trim();
+  const hit=_uCollabList.find(x=>x.name===v);
+  if(hit){const sid=inp.parentNode.querySelectorAll('input')[1];if(sid&&hit.sid)sid.value=hit.sid;}
+  if(!isCurrentUserOfficer()||!v)return;
+  clearTimeout(_uCollabTimer);
+  _uCollabTimer=setTimeout(async()=>{
+    try{
+      const d=await cloudJson('/api/member/officer-collab-suggest',{method:'POST',body:JSON.stringify({
+        name:document.getElementById('ub-name').value.trim(),sid:document.getElementById('ub-sid').value.trim(),
+        phone:document.getElementById('ub-phone').value.trim(),q:v})});
+      _uCollabList=d.list||[];
+      document.getElementById('ub-collab-dl').innerHTML=_uCollabList.map(x=>`<option value="${x.name.replace(/"/g,'&quot;')}">${x.sid}</option>`).join('');
+      const h2=_uCollabList.find(x=>x.name===inp.value.trim());
+      if(h2){const sid=inp.parentNode.querySelectorAll('input')[1];if(sid&&h2.sid)sid.value=h2.sid;}
+    }catch{}
+  },250);
 }
 function getUCollabMembers(){
   return[...document.getElementById('ub-collab-list').children].map(r=>{
