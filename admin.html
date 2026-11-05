@@ -355,6 +355,14 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <option value="all">全部類別</option><option value="personal">個人借用</option>
         <option value="event">成發拍攝</option><option value="task">社內任務</option>
       </select>
+      <select id="rec-sort" onchange="setRecSort(this.value)" title="排序方式" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
+        <option value="manual">排序：手動（可拖移）</option>
+        <option value="start-desc">借出時間：新→舊</option>
+        <option value="start-asc">借出時間：舊→新</option>
+        <option value="created-desc">申請時間：新→舊</option>
+        <option value="created-asc">申請時間：舊→新</option>
+      </select>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="rec-show-created" onchange="setRecShowCreated(this.checked)" style="width:auto"> 顯示申請時間</label>
       <button type="button" class="btn btn-sm" onclick="openCategoryModal()">⚙️ 管理借用類別</button>
     </div>
   </div>
@@ -1674,8 +1682,21 @@ function calRecordCoversDate(r,dateKey){
 }
 
 function escHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function fmtCreated(s){if(!s)return'';const d=new Date(s);if(isNaN(d))return'';return`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+async function setRecSort(v){uiPrefs.recSort=v;renderRecords();try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存排序設定失敗：'+e.message);}}
+async function setRecShowCreated(on){uiPrefs.recShowCreated=!!on;renderRecords();try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存設定失敗：'+e.message);}}
+function sortRecordsView(list){
+  const mode=uiPrefs.recSort||'manual';
+  if(mode==='manual')return list;
+  const key=mode.startsWith('start')?'start':'createdAt';
+  const dir=mode.endsWith('asc')?1:-1;
+  const t=r=>{const v=new Date(r[key]||0).getTime();return isNaN(v)?0:v;};
+  return list.slice().sort((a,b)=>dir*(t(a)-t(b)));
+}
 function renderRecords(){
   renderCalendar();
+  const rs=document.getElementById('rec-sort');if(rs)rs.value=uiPrefs.recSort||'manual';
+  const rc=document.getElementById('rec-show-created');if(rc)rc.checked=uiPrefs.recShowCreated!==false;
   const sf=document.getElementById('filter-status').value;
   const cf=document.getElementById('filter-cat').value;
   const q=(document.getElementById('filter-search').value||'').toLowerCase();
@@ -1685,6 +1706,9 @@ function renderRecords(){
   if(cf!=='all')filtered=filtered.filter(r=>r.cat===cf);
   if(q)filtered=filtered.filter(r=>r.name.toLowerCase().includes(q)||(r.sid||'').toLowerCase().includes(q)||(r.taskName||'').toLowerCase().includes(q));
   if(calSelectedDate)filtered=filtered.filter(r=>calRecordCoversDate(r,calSelectedDate));
+  filtered=sortRecordsView(filtered);
+  const manualSort=(uiPrefs.recSort||'manual')==='manual';
+  const showCreated=uiPrefs.recShowCreated!==false;
 
   const counts={pending:0,future:0,active:0,partial:0,overdue:0,done:0};
   computed.forEach(r=>{if(counts[r.cs]!=null)counts[r.cs]++;});
@@ -1702,10 +1726,10 @@ function renderRecords(){
     // Quick-mark records are pure calendar notes: no equipment, no borrower, no
     // review step. Render a simplified row and skip every action that only makes
     // sense for a real borrow (審核/歸還/修改器材/完整編輯) — only offer delete.
-    const dragAttr=`draggable="true" ondragstart="recDragStart(event,'${r.id}')" ondragover="recDragOver(event,'${r.id}')" ondragleave="recDragLeave(event)" ondrop="recDragDrop(event,'${r.id}')" ondragend="recDragEnd(event)" style="cursor:grab"`;
+    const dragAttr=!manualSort?`style="cursor:default"`:`draggable="true" ondragstart="recDragStart(event,'${r.id}')" ondragover="recDragOver(event,'${r.id}')" ondragleave="recDragLeave(event)" ondrop="recDragDrop(event,'${r.id}')" ondragend="recDragEnd(event)" style="cursor:grab"`;
     if(r.isQuickMark){
-      return`<tr ${dragAttr.replace('style="cursor:grab"','style="background:#fafafa;cursor:grab"')}>
-        <td colspan="4">📌 ${catBadgeHtml(r.cat)} ${r.note?r.note:'<span style="color:#9ca3af">（無備註）</span>'}</td>
+      return`<tr ${dragAttr.replace(/style="cursor:(grab|default)"/,'style="background:#fafafa;cursor:$1"')}>
+        <td colspan="4">📌 ${catBadgeHtml(r.cat)} ${r.note?r.note:'<span style="color:#9ca3af">（無備註）</span>'}${showCreated&&r.createdAt?`<div style="font-size:11px;color:#9ca3af;margin-top:3px">🕒 標記於 ${fmtCreated(r.createdAt)}</div>`:''}</td>
         <td style="font-size:11px;white-space:nowrap">${fmtDate(r.start)}</td>
         <td style="font-size:11px;white-space:nowrap">${fmtDate(r.end)}</td>
         <td><span class="badge" style="background:#f1f5f9;color:#64748b">純標記</span></td>
@@ -1736,7 +1760,7 @@ function renderRecords(){
       :r.cs!=='done'?`<button class="btn btn-sm btn-warn" onclick="openReturn('${r.id}')">歸還</button>`:'';
     const editRecBtn=`<button class="btn btn-sm" style="margin-top:2px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe" onclick="openEditRecord('${r.id}')">✏️ 完整編輯</button>`;
     return`<tr ${dragAttr}>
-      <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span></td>
+      <td><strong>${r.name}</strong><br><span style="font-size:11px;color:#9ca3af">${r.phone||''}</span>${showCreated&&r.createdAt?`<div style="font-size:11px;color:#6b7280;margin-top:3px;white-space:nowrap">🕒 申請 ${fmtCreated(r.createdAt)}</div>`:''}</td>
       <td style="font-size:11px">${r.dept||''}<br>${r.sid||''}</td>
       <td style="max-width:200px">${catBadgeHtml(r.cat)}${r.taskName?`<br><span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}
         ${(r.collabs||[]).filter(c=>c&&(c.name||c.sid)).length?`<div style="font-size:11px;color:#1d4ed8;margin-top:4px">👥 共同：${(r.collabs||[]).filter(c=>c&&(c.name||c.sid)).map(c=>escHtml(c.name||'')+(c.sid?`（${escHtml(c.sid)}）`:'')).join('、')}</div>`:''}
