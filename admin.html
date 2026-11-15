@@ -1141,8 +1141,25 @@ const PH_FIELDS=[
 ];
 const PH_DEFAULTS={name:'輸入姓名',dept:'例：行銷三乙',sid:'例：D1345026',phone:'0912345678',email:'abc@gmail.com',taskName:'例：115_08_23_什麼度冬東',note:'',collabName:'姓名',collabSid:'學號',eqSearch:'搜尋器材名稱...',vName:'輸入姓名',vSid:'輸入學號',vPhone:'輸入電話'};
 function phText(k,src){const v=(src||placeholders||{})[k];return (v!==undefined&&v!==null&&v!=='')?v:(PH_DEFAULTS[k]||'');}
+// 用途說明／任務名稱：標題與提示文字可依借用類別各自設定。鍵：taskName@<類別id>、taskNameLabel@<類別id>
+function taskNameLabelFor(cat,src){
+  const ph=src||placeholders||{};
+  let lb=(ph['taskNameLabel@'+cat]||'').trim()||(cat==='task'?'任務名稱':'用途說明');
+  if(cat==='task'&&!/\*\s*$/.test(lb))lb+=' *';
+  return lb;
+}
+function taskNameHintFor(cat,src){
+  const ph=src||placeholders||{};
+  return (ph['taskName@'+cat]||'').trim()||phText('taskName',src);
+}
+function applyTaskNameText(cat,labelId,inputId,src){
+  const l=document.getElementById(labelId),i=document.getElementById(inputId);
+  if(l)l.textContent=taskNameLabelFor(cat,src);
+  if(i)i.placeholder=taskNameHintFor(cat,src);
+}
 function applyPlaceholders(src){
   PH_FIELDS.forEach(([k,,id])=>{if(!id)return;const el=document.getElementById(id);if(el)el.placeholder=phText(k,src);});
+  const bc=document.getElementById('b-cat');if(bc)applyTaskNameText(bc.value,'task-name-label','b-task-name',src);
 }
 
 // Fetch placeholders from public API (no auth needed) and apply to form before login
@@ -1265,7 +1282,7 @@ function onCatChange(){
   selectedEq={};assignedCards={};
   const cat=document.getElementById('b-cat').value;
   // 用途/任務名稱欄位對所有類別都開放填寫；只有「社內任務」強制必填（label 加星號、送出時檢查）
-  document.getElementById('task-name-label').textContent=cat==='task'?'任務名稱 *':'用途說明';
+  applyTaskNameText(cat,'task-name-label','b-task-name');
   document.getElementById('collab-section').style.display=cat==='task'?'block':'none';
   renderEqList();renderSelected();
 }
@@ -1582,7 +1599,7 @@ async function submitBorrow(){
     document.getElementById('eq-search').value='';
     document.getElementById('collab-list').innerHTML='';
     document.getElementById('collab-section').style.display='none';
-    document.getElementById('task-name-label').textContent='用途說明';
+    applyTaskNameText('','task-name-label','b-task-name');
     document.getElementById('conflict-banner').style.display='none';
     document.getElementById('time-reminder').style.display='block';
     setDefaultTimes();renderEqList();renderSelected();
@@ -2678,9 +2695,22 @@ function loadPlaceholdersUI(){
   if(!box)return;
   box.innerHTML=PH_FIELDS.map(([k,label])=>`<label>${label}</label><input type="text" id="ph-${k}" placeholder="${(PH_DEFAULTS[k]||'（預設為空）').replace(/"/g,'&quot;')}">`).join('');
   PH_FIELDS.forEach(([k])=>{const el=document.getElementById('ph-'+k);if(el)el.value=placeholders[k]||'';});
+  // 依借用類別各自設定「用途說明／任務名稱」的欄位標題與提示文字（留空＝沿用上面的通用設定）
+  box.insertAdjacentHTML('beforeend',`<div style="margin-top:14px;padding:10px;border:1px dashed #d1d5db;border-radius:8px">
+    <div style="font-weight:600;font-size:13px;margin-bottom:2px">📂 依借用類別設定「用途說明／任務名稱」</div>
+    <div style="font-size:11px;color:#6b7280;margin-bottom:8px">每個借用類別可以有不同的欄位標題與提示文字；留空就沿用上面的通用設定。管理員新增借用與借用端都會依選的類別顯示。</div>
+    ${categories.map(c=>`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:${catColor(c.id)}">${escHtml(c.name)}</div>
+      <input type="text" data-tnc="${escHtml(c.id)}" data-tnk="taskNameLabel" placeholder="欄位標題（預設：${c.id==='task'?'任務名稱 *':'用途說明'}）" style="margin-top:3px">
+      <input type="text" data-tnc="${escHtml(c.id)}" data-tnk="taskName" placeholder="提示文字（留空＝沿用通用）" style="margin-top:3px"></div>`).join('')}
+  </div>`);
+  box.querySelectorAll('[data-tnc]').forEach(el=>{el.value=placeholders[el.dataset.tnk+'@'+el.dataset.tnc]||'';});
 }
 async function savePlaceholders(){
   PH_FIELDS.forEach(([k])=>{const el=document.getElementById('ph-'+k);if(el)placeholders[k]=el.value.trim();});
+  document.querySelectorAll('#ph-fields [data-tnc]').forEach(el=>{
+    const key=el.dataset.tnk+'@'+el.dataset.tnc,v=el.value.trim();
+    if(v)placeholders[key]=v;else delete placeholders[key];
+  });
   await apiPut('placeholders',placeholders);applyPlaceholders();
   document.getElementById('ph-ok').style.display='block';setTimeout(()=>document.getElementById('ph-ok').style.display='none',2000);
 }
@@ -3176,9 +3206,9 @@ function openEditRecord(id){
   document.getElementById('er-email').value=r.email||'';
   document.getElementById('er-cat').value=r.cat||'personal';
   document.getElementById('er-taskname').value=r.taskName||'';
-  document.getElementById('er-taskname-label').textContent=r.cat==='task'?'任務名稱 *':'用途說明';
+  applyTaskNameText(r.cat,'er-taskname-label','er-taskname');
   document.getElementById('er-cat').onchange=function(){
-    document.getElementById('er-taskname-label').textContent=this.value==='task'?'任務名稱 *':'用途說明';
+    applyTaskNameText(this.value,'er-taskname-label','er-taskname');
   };
   document.getElementById('er-start').value=fmtDTLfromISO(r.start);
   document.getElementById('er-end').value=fmtDTLfromISO(r.end);
