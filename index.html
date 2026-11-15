@@ -227,6 +227,7 @@ function isItemFullyReturned(item,returnedItems){
   return itemReturnKeys(item).every(k=>returnedItems.includes(k));
 }
 function computeStatus(r){
+  if(r.status==='rejected')return'rejected';
   if(r.status==='pending')return'pending';if(r.status==='done')return'done';
   const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
   const allItems=r.equipment||[],returned=r.returnedItems||[];
@@ -236,7 +237,7 @@ function computeStatus(r){
   return someRet?'partial':'active';
 }
 function statusBadge(st){
-  return{pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
+  return{rejected:'<span class="badge" style="background:#fee2e2;color:#b91c1c">未通過</span>',pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
     active:'<span class="badge badge-active">借用中</span>',partial:'<span class="badge badge-partial">部分歸還</span>',
     overdue:'<span class="badge badge-overdue">逾期未還</span>',done:'<span class="badge badge-done">已歸還</span>'}[st]||st;
 }
@@ -375,7 +376,7 @@ function showResults(){
         <div class="info-row"><span class="info-label">借出</span><span>${fmtDate(r.start)}</span></div>
         <div class="info-row"><span class="info-label">歸還</span><span>${fmtDate(r.end)}</span></div>
         ${r.note?`<div class="info-row"><span class="info-label">備註</span><span>${r.note}</span></div>`:''}
-        ${cs==='pending'?'<div style="font-size:11px;color:#f57f17;margin-top:6px">⏳ 審核中，通過後 Email 通知</div>':''}
+        ${cs==='pending'?'<div style="font-size:11px;color:#f57f17;margin-top:6px">⏳ 審核中，通過後 Email 通知</div>':''}${cs==='rejected'?'<div style="font-size:11px;color:#b91c1c;margin-top:6px">✖ 此申請未通過，如有疑問請洽管理員</div>':''}
       </div>`;
     }).join('');
   }
@@ -391,7 +392,7 @@ function doLogout(){
 // ── Equipment Schedule ──
 function getEqSchedules(eqId){
   return pubRecords.filter(r=>{
-    const st=computeStatus(r);if(st==='done')return false;
+    const st=computeStatus(r);if(st==='done'||st==='rejected')return false;
     return(r.equipment||[]).some(x=>x.id===eqId&&!isItemFullyReturned(x,r.returnedItems||[]));
   });
 }
@@ -474,7 +475,7 @@ function filterUEqCat(cat,btn){
 function getUOccupied(eqId,start,end){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   return pubRecords.filter(r=>{
-    const st=computeStatus(r);if(st==='pending'||st==='done')return false;
+    const st=computeStatus(r);if(st==='pending'||st==='done'||st==='rejected')return false;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
     return true;
   }).reduce((sum,r)=>{
@@ -501,7 +502,7 @@ function getBusyCards(eqId,start,end){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   const busy=new Set();
   pubRecords.forEach(r=>{
-    const st=computeStatus(r);if(st==='done'||st==='pending')return;
+    const st=computeStatus(r);if(st==='done'||st==='pending'||st==='rejected')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}

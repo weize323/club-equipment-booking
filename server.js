@@ -390,7 +390,7 @@ function getOccupied(eqId,start,end,excludeId){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   return db.records.filter(r=>{
     if(r.id===excludeId)return false;
-    if(r.status==='pending'||r.status==='done')return false;
+    if(r.status==='pending'||r.status==='done'||r.status==='rejected')return false;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return false;
     if(isItemFullyReturned(item,r.returnedItems||[]))return false;
@@ -418,7 +418,7 @@ function getBusyCards(eqId,start,end,excludeId){
   const busy=new Set();
   db.records.forEach(r=>{
     if(r.id===excludeId)return;
-    if(r.status==='done'||r.status==='pending')return;
+    if(r.status==='done'||r.status==='pending'||r.status==='rejected')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
@@ -506,7 +506,7 @@ function validateRecordsArray(recordsArr){
       if(!cards.length) continue;
       for(const other of recordsArr){
         if(other.id===r.id) continue;
-        if(other.status==='pending'||other.status==='done') continue;
+        if(other.status==='pending'||other.status==='done'||other.status==='rejected') continue;
         const otherItem=(other.equipment||[]).find(x=>x.id===item.id);
         if(!otherItem) continue;
         if(isItemFullyReturned(otherItem,other.returnedItems||[])) continue;
@@ -915,7 +915,7 @@ const server=http.createServer(async(req,res)=>{
         }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
       }else if(updated.status==='done'){updated.status='approved';delete updated.returnedAt;}
       db.records[idx]=updated;
-      if(updated.status!=='pending'){ if(updated.cat==='personal')creditRedeem(updated); else refundRedeem(updated); }
+      if(updated.status!=='pending'&&updated.status!=='rejected'){ if(updated.cat==='personal')creditRedeem(updated); else refundRedeem(updated); }
       // Keep collaborators' 社內任務 counts consistent with the submit rule (+1 per collaborator on a
       // task record): newly added collaborators get +1, removed ones -1 (never below 0).
       {
@@ -1010,10 +1010,12 @@ const server=http.createServer(async(req,res)=>{
       const recId=p.split('/')[4];
       const idx=db.records.findIndex(r=>r.id===recId);
       if(idx===-1)return json(res,404,{error:'紀錄不存在'});
-      refundRedeem(db.records[idx]);
-      db.records.splice(idx,1);
+      // 駁回＝標記為「未通過」並保留紀錄（不再佔用器材、不計兌換）；要移除請用刪除。
+      const rec=db.records[idx];
+      refundRedeem(rec);
+      rec.status='rejected';rec.rejectedAt=new Date().toISOString();
       writeDB(db);
-      return json(res,200,{ok:true,deletedId:recId});
+      return json(res,200,{ok:true,record:rec,members:db.members});
     }
 
     // ── Admin: delete a single record by id (any status) ──
@@ -1306,6 +1308,7 @@ const server=http.createServer(async(req,res)=>{
       const plan=new Map();let skipped={officer:0,noMember:0,pending:0};
       for(const rec of db.records){
         if(rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)continue;
+        if(rec.status==='rejected')continue;
         if(rec.status==='pending'){skipped.pending++;continue;}
         const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
         if(!mem){skipped.noMember++;continue;}

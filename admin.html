@@ -349,7 +349,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
         <option value="all">全部狀態</option><option value="pending">審核中</option>
         <option value="future">尚未借出</option><option value="active">借用中</option>
         <option value="partial">部分歸還</option><option value="overdue">逾期</option>
-        <option value="done">已歸還</option>
+        <option value="done">已歸還</option><option value="rejected">未通過</option>
       </select>
       <select id="filter-cat" onchange="renderRecords()" style="width:auto;padding:6px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;outline:none;font-family:inherit">
         <option value="all">全部類別</option><option value="personal">個人借用</option>
@@ -1071,6 +1071,7 @@ function isItemFullyReturned(item,returnedItems){
   return itemReturnKeys(item).every(k=>returnedItems.includes(k));
 }
 function computeStatus(r){
+  if(r.status==='rejected')return'rejected';
   if(r.status==='pending')return'pending';
   if(r.status==='done')return'done';
   const now=nowTW(),start=new Date(r.start),end=new Date(r.end);
@@ -1081,7 +1082,7 @@ function computeStatus(r){
   return someRet?'partial':'active';
 }
 function statusBadge(st){
-  return{pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
+  return{rejected:'<span class="badge" style="background:#fee2e2;color:#b91c1c">未通過</span>',pending:'<span class="badge badge-pending">審核中</span>',future:'<span class="badge badge-future">尚未借出</span>',
     active:'<span class="badge badge-active">借用中</span>',partial:'<span class="badge badge-partial">部分歸還</span>',
     overdue:'<span class="badge badge-overdue">逾期未還</span>',done:'<span class="badge badge-done">已歸還</span>'}[st]||st;
 }
@@ -1218,7 +1219,7 @@ function getOccupied(eqId,start,end,excludeId){
   const s=start?new Date(start):null,e=end?new Date(end):null;
   return records.filter(r=>{
     if(r.id===excludeId)return false;
-    const st=computeStatus(r);if(st==='pending'||st==='done')return false;
+    const st=computeStatus(r);if(st==='pending'||st==='done'||st==='rejected')return false;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return false;}
     return true;
   }).reduce((sum,r)=>{
@@ -1248,7 +1249,7 @@ function getBusyCards(eqId,start,end,excludeId){
   const busy=new Set();
   records.forEach(r=>{
     if(r.id===excludeId)return;
-    const st=computeStatus(r);if(st==='done'||st==='pending')return;
+    const st=computeStatus(r);if(st==='done'||st==='pending'||st==='rejected')return;
     const item=(r.equipment||[]).find(x=>x.id===eqId);
     if(!item)return;
     if(s&&e){const rs=new Date(r.start),re=new Date(r.end);if(!(rs<e&&re>s))return;}
@@ -1490,7 +1491,7 @@ function openEqSchedule(eqId){
   const e=equipment.find(x=>x.id===eqId);
   document.getElementById('eq-sch-title').textContent=(e?e.name:'器材')+' 借用時段';
   const relevant=records.filter(r=>{
-    const st=computeStatus(r);if(st==='done')return false;
+    const st=computeStatus(r);if(st==='done'||st==='rejected')return false;
     return(r.equipment||[]).some(x=>x.id===eqId&&!isItemFullyReturned(x,r.returnedItems||[]));
   });
   document.getElementById('eq-sch-body').innerHTML=!relevant.length?'<p style="color:#9ca3af;padding:12px 0">目前無借用紀錄</p>':
@@ -1727,12 +1728,12 @@ function renderRecords(){
   const manualSort=(uiPrefs.recSort||'manual')==='manual';
   const showCreated=uiPrefs.recShowCreated!==false;
 
-  const counts={pending:0,future:0,active:0,partial:0,overdue:0,done:0};
+  const counts={rejected:0,pending:0,future:0,active:0,partial:0,overdue:0,done:0};
   computed.forEach(r=>{if(counts[r.cs]!=null)counts[r.cs]++;});
   document.getElementById('records-stats').innerHTML=[
     {l:'審核中',n:counts.pending,c:'#f57f17'},{l:'尚未借出',n:counts.future,c:'#6a1b9a'},
     {l:'借用中',n:counts.active,c:'#e65100'},{l:'逾期',n:counts.overdue,c:'#dc2626'},
-    {l:'部分歸還',n:counts.partial,c:'#2e7d32'},{l:'已歸還',n:counts.done,c:'#6b7280'},{l:'總計',n:records.length,c:'#374151'}
+    {l:'部分歸還',n:counts.partial,c:'#2e7d32'},{l:'已歸還',n:counts.done,c:'#6b7280'},{l:'未通過',n:counts.rejected,c:'#b91c1c'},{l:'總計',n:records.length,c:'#374151'}
   ].map(s=>`<div class="stat"><div class="stat-num" style="color:${s.c}">${s.n}</div><div class="stat-label">${s.l}</div></div>`).join('');
 
   const tbody=document.getElementById('records-body');
@@ -1774,6 +1775,7 @@ function renderRecords(){
     }).join('');
     const actionBtns=r.cs==='pending'
       ?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">審核</button>`
+      :r.cs==='rejected'?`<button class="btn btn-sm btn-success" onclick="openApprove('${r.id}')">重新審核</button>`
       :r.cs!=='done'?`<button class="btn btn-sm btn-warn" onclick="openReturn('${r.id}')">歸還</button>`:'';
     const editRecBtn=`<button class="btn btn-sm" style="margin-top:2px;background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe" onclick="openEditRecord('${r.id}')">✏️ 完整編輯</button>`;
     return`<tr ${dragAttr}>
@@ -1972,10 +1974,12 @@ async function approveBorrow(){
   }catch(e){alert('審核失敗：'+e.message);}
 }
 async function rejectBorrow(){
-  if(!confirm('確定駁回？'))return;
+  if(!confirm('確定駁回？駁回後這筆會標示為「未通過」並保留在借用紀錄中（可再「重新審核」或手動刪除）。'))return;
   try{
-    await api(`/api/admin/records/${approveTargetId}/reject`,{method:'POST'});
-    records=records.filter(x=>x.id!==approveTargetId);
+    const d=await api(`/api/admin/records/${approveTargetId}/reject`,{method:'POST'});
+    const i=records.findIndex(x=>x.id===approveTargetId);
+    if(i>=0&&d.record)records[i]=d.record;
+    if(d.members)members=d.members;
     closeModal('modal-approve');renderRecords();
   }catch(e){alert('駁回失敗：'+e.message);}
 }
