@@ -294,8 +294,8 @@ function findMemberForRecord(rec){
   const byName=db.members.filter(x=>String(x.name||'').trim()===name);
   return byName.length===1?byName[0]:null;
 }
-// 幹部是否計入「已兌換」：由管理員在社員管理頁切換（uiPrefs.redeemCountOfficers），預設不計。
-function memberCountsForRedeem(mem){return !!mem&&(!mem.isOfficer||!!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers));}
+// 幹部是否計入「已兌換」：由管理員在社員管理頁切換（uiPrefs.redeemCountOfficers），預設計入。
+function memberCountsForRedeem(mem){return !!mem&&(!mem.isOfficer||!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers===false));}
 function creditRedeem(rec){
   if(!rec||rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)return;
   const mem=findMemberForRecord(rec);
@@ -1361,7 +1361,7 @@ const server=http.createServer(async(req,res)=>{
         for(const r of rows.values()){const mem=db.members.find(x=>x.id===r.id);if(mem)mem.redeemedCount=r.counted;}
         writeDB(db);
       }
-      return json(res,200,{ok:true,applied:b.apply===true,moved:moved.map(x=>({from:x.from,to:x.to})),excluded:[...new Set(excluded.map(x=>x.name))],countOfficers:!!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers),diffs,members:db.members});
+      return json(res,200,{ok:true,applied:b.apply===true,moved:moved.map(x=>({from:x.from,to:x.to})),excluded:[...new Set(excluded.map(x=>x.name))],countOfficers:!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers===false),diffs,members:db.members});
     }
 
     // ── Admin: set / adjust how many times a member has already redeemed ──

@@ -2100,7 +2100,7 @@ async function setMemberCol(id,show){
   try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存顯示設定失敗：'+e.message);}
 }
 function renderMembers(){
-  {const oc=document.getElementById('redeem-count-officers');if(oc)oc.checked=!!uiPrefs.redeemCountOfficers;}
+  {const oc=document.getElementById('redeem-count-officers');if(oc)oc.checked=uiPrefs.redeemCountOfficers!==false;}
   const tbody=document.getElementById('members-body');
   const labels={name:'姓名',dept:'系級',sid:'學號',role:'身分',tasks:catLabel('task')+'場次（累積）',redeemed:'已兌換',avail:'可兌換',
     progress:'進度 <button type="button" class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editRedeemThreshold()" title="修改規定次數">✏️ 規定次數</button>'};
