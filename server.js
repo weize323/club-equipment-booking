@@ -294,10 +294,12 @@ function findMemberForRecord(rec){
   const byName=db.members.filter(x=>String(x.name||'').trim()===name);
   return byName.length===1?byName[0]:null;
 }
+// 幹部是否計入「已兌換」：由管理員在社員管理頁切換（uiPrefs.redeemCountOfficers），預設不計。
+function memberCountsForRedeem(mem){return !!mem&&(!mem.isOfficer||!!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers));}
 function creditRedeem(rec){
   if(!rec||rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)return;
   const mem=findMemberForRecord(rec);
-  if(!mem)return;
+  if(!mem||!memberCountsForRedeem(mem))return;
   mem.redeemedCount=(mem.redeemedCount||0)+1;
   rec.redeemCounted=true;rec.redeemMemberId=mem.id;
 }
@@ -1319,6 +1321,7 @@ const server=http.createServer(async(req,res)=>{
         if(rec.status==='pending'){skipped.pending++;continue;}
         const mem=findMemberForRecord(rec);
         if(!mem){skipped.noMember++;continue;}
+        if(!memberCountsForRedeem(mem)){skipped.officer++;continue;}
         plan.set(mem.id,{name:mem.name,add:((plan.get(mem.id)||{}).add||0)+1});
         if(!dry){mem.redeemedCount=(mem.redeemedCount||0)+1;rec.redeemCounted=true;rec.redeemMemberId=mem.id;}
       }
@@ -1333,11 +1336,13 @@ const server=http.createServer(async(req,res)=>{
       if(!isAdmin(req))return json(res,401,{error:'未登入'});
       const b=await bodyJSON(req);
       const rows=new Map(db.members.map(x=>[x.id,{id:x.id,name:x.name,redeemed:x.redeemedCount||0,counted:0}]));
-      const moved=[];
+      const moved=[],excluded=[];
       for(const rec of db.records){
         if(rec.isQuickMark||rec.cat!=='personal'||!rec.redeemCounted)continue;
         const cur=rows.get(rec.redeemMemberId);
         const right=findMemberForRecord(rec);
+        const curMem=db.members.find(x=>x.id===rec.redeemMemberId);
+        if(curMem&&!memberCountsForRedeem(curMem)){excluded.push({rec,name:curMem.name});continue;}
         if(right&&right.id!==rec.redeemMemberId){
           moved.push({rec,from:cur?cur.name:'（已不存在）',to:right.name,toId:right.id});
           rows.get(right.id).counted++;
@@ -1345,6 +1350,7 @@ const server=http.createServer(async(req,res)=>{
       }
       const diffs=[...rows.values()].filter(r=>r.redeemed!==r.counted);
       if(b.apply===true){
+        for(const ex of excluded){ex.rec.redeemCounted=false;delete ex.rec.redeemMemberId;}
         for(const mv of moved){
           const from=db.members.find(x=>x.id===mv.rec.redeemMemberId);
           if(from)from.redeemedCount=Math.max(0,(from.redeemedCount||0)-1);
@@ -1355,7 +1361,7 @@ const server=http.createServer(async(req,res)=>{
         for(const r of rows.values()){const mem=db.members.find(x=>x.id===r.id);if(mem)mem.redeemedCount=r.counted;}
         writeDB(db);
       }
-      return json(res,200,{ok:true,applied:b.apply===true,moved:moved.map(x=>({from:x.from,to:x.to})),diffs,members:db.members});
+      return json(res,200,{ok:true,applied:b.apply===true,moved:moved.map(x=>({from:x.from,to:x.to})),excluded:[...new Set(excluded.map(x=>x.name))],countOfficers:!!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers),diffs,members:db.members});
     }
 
     // ── Admin: set / adjust how many times a member has already redeemed ──

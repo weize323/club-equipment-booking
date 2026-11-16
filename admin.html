@@ -404,6 +404,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
       <p class="text-muted" style="margin:0">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="backfillRedeem()">🔄 補算舊的練習借用</button>
       <button type="button" class="btn btn-sm" onclick="auditRedeem()">🔍 核對已兌換</button>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="取消勾選：幹部的練習借用不會算進已兌換"><input type="checkbox" id="redeem-count-officers" onchange="setRedeemCountOfficers(this.checked)" style="width:auto"> 幹部的練習借用也計入已兌換</label>
       <button type="button" class="btn btn-sm" onclick="toggleMemberColPanel()">⚙️ 顯示欄位</button></div>
     </div>
     <div id="member-col-panel" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0"></div>
@@ -2099,6 +2100,7 @@ async function setMemberCol(id,show){
   try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存顯示設定失敗：'+e.message);}
 }
 function renderMembers(){
+  {const oc=document.getElementById('redeem-count-officers');if(oc)oc.checked=!!uiPrefs.redeemCountOfficers;}
   const tbody=document.getElementById('members-body');
   const labels={name:'姓名',dept:'系級',sid:'學號',role:'身分',tasks:catLabel('task')+'場次（累積）',redeemed:'已兌換',avail:'可兌換',
     progress:'進度 <button type="button" class="btn btn-sm" style="padding:0 6px;font-size:11px" onclick="editRedeemThreshold()" title="修改規定次數">✏️ 規定次數</button>'};
@@ -2298,12 +2300,17 @@ async function backfillRedeem(){
   }catch(e){alert('補算失敗：'+e.message);}
 }
 // 核對：把每位社員的「已兌換」跟實際算進去的練習借用紀錄筆數對照；可一鍵改成以紀錄為準。
+async function setRedeemCountOfficers(on){
+  uiPrefs.redeemCountOfficers=!!on;
+  try{await apiPut('uiPrefs',uiPrefs);}catch(e){alert('儲存失敗：'+e.message);return;}
+  alert(on?'之後幹部的練習借用會計入「已兌換」。\n要套用到現有資料，請按「🔍 核對已兌換」。':'之後幹部的練習借用不會計入「已兌換」。\n要把幹部目前被算進去的次數清掉，請按「🔍 核對已兌換」。');
+}
 async function auditRedeem(){
   try{
     const pre=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({})});
-    if(!pre.moved.length&&!pre.diffs.length){alert('核對完成：每位社員的「已兌換」都跟練習借用紀錄筆數一致，沒有問題。');return;}
+    if(!pre.moved.length&&!pre.diffs.length&&!(pre.excluded||[]).length){alert('核對完成：每位社員的「已兌換」都跟練習借用紀錄筆數一致，沒有問題。');return;}
     const l1=pre.moved.map(x=>`・算錯人：${x.from} → 應為 ${x.to}`).join('\n');
-    const l2=pre.diffs.map(d=>`・${d.name}：目前已兌換 ${d.redeemed} 次，但練習借用紀錄只有 ${d.counted} 筆`).join('\n');
+    const l2=pre.diffs.map(d=>`・${d.name}：目前已兌換 ${d.redeemed} 次，應為 ${d.counted} 次`).join('\n')+((pre.excluded||[]).length?`\n・幹部不計入已兌換：${pre.excluded.join('、')}（勾選「幹部的練習借用也計入已兌換」可改變）`:'');
     if(!confirm(`核對結果：\n\n${l1}${l1&&l2?'\n':''}${l2}\n\n按「確定」＝全部改成以紀錄筆數為準（會覆蓋上面這些人的已兌換）。\n按「取消」＝不改，你可以自己在社員列個別修改。\n（差異可能來自你先前手動填過的次數）`))return;
     const d=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({apply:true})});
     members=d.members||members;renderMembers();
