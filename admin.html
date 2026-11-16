@@ -2308,10 +2308,10 @@ async function setRedeemCountOfficers(on){
 async function auditRedeem(){
   try{
     const pre=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({})});
-    if(!pre.moved.length&&!pre.diffs.length&&!(pre.excluded||[]).length){alert('核對完成：每位社員的「已兌換」都跟練習借用紀錄筆數一致，沒有問題。');return;}
+    if(!pre.diffs.length){alert('核對完成：每位社員的「已兌換」都跟練習借用紀錄筆數一致，沒有問題。');return;}
     const l1=pre.moved.map(x=>`・算錯人：${x.from} → 應為 ${x.to}`).join('\n');
-    const l2=pre.diffs.map(d=>`・${d.name}：目前已兌換 ${d.redeemed} 次，應為 ${d.counted} 次`).join('\n')+((pre.excluded||[]).length?`\n・幹部不計入已兌換：${pre.excluded.join('、')}（勾選「幹部的練習借用也計入已兌換」可改變）`:'');
-    if(!confirm(`核對結果：\n\n${l1}${l1&&l2?'\n':''}${l2}\n\n按「確定」＝全部改成以紀錄筆數為準（會覆蓋上面這些人的已兌換）。\n按「取消」＝不改，你可以自己在社員列個別修改。\n（差異可能來自你先前手動填過的次數）`))return;
+    const l2=pre.diffs.map(d=>`・${d.name}：目前已兌換 ${d.redeemed} 次 → 依借用紀錄應為 ${d.counted} 次${d.recs.length?'\n　　（'+d.recs.join('、')+'）':''}`).join('\n');
+    if(!confirm(`核對結果（直接從借用紀錄重新數「已審核通過的${catLabel('personal')}」）：\n\n${l2}\n\n按「確定」＝把這些人的已兌換改成紀錄筆數。\n按「取消」＝不改，你可以自己在社員列個別修改。\n（差異可能來自你先前手動填過的次數）`))return;
     const d=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({apply:true})});
     members=d.members||members;renderMembers();
     alert('已依紀錄筆數修正。');
