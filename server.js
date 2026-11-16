@@ -287,9 +287,16 @@ function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&
 // deleting that record — or changing its category away from 個人借用 — gives the credit back.
 // rec.redeemCounted/redeemMemberId make this exactly reversible and never double-count.
 // Officers are counted the same as everyone else.
+// 紀錄 → 社員：先用學號精確比對；沒有學號/找不到才用姓名，且姓名必須只對應到一位社員（同名多人不亂猜）。
+function findMemberForRecord(rec){
+  const sid=String(rec.sid||'').trim(),name=String(rec.name||'').trim();
+  if(sid){const m=db.members.find(x=>String(x.sid||'').trim()===sid);if(m)return m;}
+  const byName=db.members.filter(x=>String(x.name||'').trim()===name);
+  return byName.length===1?byName[0]:null;
+}
 function creditRedeem(rec){
   if(!rec||rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)return;
-  const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
+  const mem=findMemberForRecord(rec);
   if(!mem)return;
   mem.redeemedCount=(mem.redeemedCount||0)+1;
   rec.redeemCounted=true;rec.redeemMemberId=mem.id;
@@ -1310,13 +1317,45 @@ const server=http.createServer(async(req,res)=>{
         if(rec.isQuickMark||rec.cat!=='personal'||rec.redeemCounted)continue;
         if(rec.status==='rejected')continue;
         if(rec.status==='pending'){skipped.pending++;continue;}
-        const mem=db.members.find(x=>(rec.sid&&x.sid===rec.sid)||x.name===rec.name);
+        const mem=findMemberForRecord(rec);
         if(!mem){skipped.noMember++;continue;}
         plan.set(mem.id,{name:mem.name,add:((plan.get(mem.id)||{}).add||0)+1});
         if(!dry){mem.redeemedCount=(mem.redeemedCount||0)+1;rec.redeemCounted=true;rec.redeemMemberId=mem.id;}
       }
       if(!dry)writeDB(db);
       return json(res,200,{ok:true,dryRun:dry,changes:[...plan.values()],skipped,members:db.members});
+    }
+
+    // ── Admin: audit 已兌換 against the 練習借用 records actually counted. dry run by default.
+    //    apply:true → (1) move credits that were attributed to the wrong member, (2) set each member's
+    //    已兌換 to the number of records counted for them. ──
+    if(m==='POST'&&p==='/api/admin/redeem-audit'){
+      if(!isAdmin(req))return json(res,401,{error:'未登入'});
+      const b=await bodyJSON(req);
+      const rows=new Map(db.members.map(x=>[x.id,{id:x.id,name:x.name,redeemed:x.redeemedCount||0,counted:0}]));
+      const moved=[];
+      for(const rec of db.records){
+        if(rec.isQuickMark||rec.cat!=='personal'||!rec.redeemCounted)continue;
+        const cur=rows.get(rec.redeemMemberId);
+        const right=findMemberForRecord(rec);
+        if(right&&right.id!==rec.redeemMemberId){
+          moved.push({rec,from:cur?cur.name:'（已不存在）',to:right.name,toId:right.id});
+          rows.get(right.id).counted++;
+        }else if(cur)cur.counted++;
+      }
+      const diffs=[...rows.values()].filter(r=>r.redeemed!==r.counted);
+      if(b.apply===true){
+        for(const mv of moved){
+          const from=db.members.find(x=>x.id===mv.rec.redeemMemberId);
+          if(from)from.redeemedCount=Math.max(0,(from.redeemedCount||0)-1);
+          const to=db.members.find(x=>x.id===mv.toId);
+          if(to)to.redeemedCount=(to.redeemedCount||0)+1;
+          mv.rec.redeemMemberId=mv.toId;
+        }
+        for(const r of rows.values()){const mem=db.members.find(x=>x.id===r.id);if(mem)mem.redeemedCount=r.counted;}
+        writeDB(db);
+      }
+      return json(res,200,{ok:true,applied:b.apply===true,moved:moved.map(x=>({from:x.from,to:x.to})),diffs,members:db.members});
     }
 
     // ── Admin: set / adjust how many times a member has already redeemed ──

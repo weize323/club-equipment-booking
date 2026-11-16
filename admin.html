@@ -403,6 +403,7 @@ hr{border:none;border-top:1px solid #f0f0f0;margin:12px 0}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <p class="text-muted" style="margin:0">☰ 拖曳社員列可自由調整順序，不限制身分或類型。</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="backfillRedeem()">🔄 補算舊的練習借用</button>
+      <button type="button" class="btn btn-sm" onclick="auditRedeem()">🔍 核對已兌換</button>
       <button type="button" class="btn btn-sm" onclick="toggleMemberColPanel()">⚙️ 顯示欄位</button></div>
     </div>
     <div id="member-col-panel" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0"></div>
@@ -2296,6 +2297,19 @@ async function backfillRedeem(){
     alert(`已補算完成，共 ${d.changes.reduce((n,c)=>n+c.add,0)} 筆。每筆紀錄只會算一次，重複按不會重複加。`);
   }catch(e){alert('補算失敗：'+e.message);}
 }
+// 核對：把每位社員的「已兌換」跟實際算進去的練習借用紀錄筆數對照；可一鍵改成以紀錄為準。
+async function auditRedeem(){
+  try{
+    const pre=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({})});
+    if(!pre.moved.length&&!pre.diffs.length){alert('核對完成：每位社員的「已兌換」都跟練習借用紀錄筆數一致，沒有問題。');return;}
+    const l1=pre.moved.map(x=>`・算錯人：${x.from} → 應為 ${x.to}`).join('\n');
+    const l2=pre.diffs.map(d=>`・${d.name}：目前已兌換 ${d.redeemed} 次，但練習借用紀錄只有 ${d.counted} 筆`).join('\n');
+    if(!confirm(`核對結果：\n\n${l1}${l1&&l2?'\n':''}${l2}\n\n按「確定」＝全部改成以紀錄筆數為準（會覆蓋上面這些人的已兌換）。\n按「取消」＝不改，你可以自己在社員列個別修改。\n（差異可能來自你先前手動填過的次數）`))return;
+    const d=await api('/api/admin/redeem-audit',{method:'POST',body:JSON.stringify({apply:true})});
+    members=d.members||members;renderMembers();
+    alert('已依紀錄筆數修正。');
+  }catch(e){alert('核對失敗：'+e.message);}
+}
 async function setRedeemedCount(id,body){
   const d=await api(`/api/admin/members/${id}/redeemed`,{method:'POST',body:JSON.stringify(body)});
   const idx=members.findIndex(x=>x.id===id);
@@ -2328,12 +2342,17 @@ function viewMemberDetail(id){
   const recs=records.filter(r=>r.name===m.name||(m.sid&&r.sid===m.sid));
   const tasks=memberTaskRecords(m);
   document.getElementById('md-title').textContent=m.name+' 的借用紀錄';
+  const redeemRecs=records.filter(r=>r.redeemCounted&&r.redeemMemberId===m.id);
+  const redeemHtml=redeemRecs.length?`<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:9px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:5px">🎟️ 已算進「已兌換」的${catLabel('personal')}（${redeemRecs.length} 筆）</div>
+      ${redeemRecs.map(r=>`<div style="font-size:12px;margin-bottom:3px">${fmtDate(r.start)} · ${escHtml(r.name)}${r.sid?'（'+escHtml(r.sid)+'）':''} · ${(r.equipment||[]).map(e=>escHtml(e.name)+'×'+e.qty).join('、')}</div>`).join('')}
+    </div>`:'';
   const taskHtml=tasks.length?`<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:9px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:600;margin-bottom:5px">🎬 ${catLabel('task')}（${tasks.length} 筆）</div>
       ${tasks.map(t=>`<div style="font-size:12px;margin-bottom:3px">${escHtml(memberTaskLabel(t))}
         <span style="color:#6b7280">· ${fmtDate(t.r.start)}${t.role==='共同'?` · <span style="color:#1d4ed8">共同（主借：${escHtml(t.r.name)}）</span>`:''}</span> ${statusBadge(computeStatus(t.r))}</div>`).join('')}
     </div>`:'';
-  document.getElementById('md-body').innerHTML=taskHtml+(!recs.length?'<p class="text-muted">尚無自己名下的借用紀錄</p>':
+  document.getElementById('md-body').innerHTML=redeemHtml+taskHtml+(!recs.length?'<p class="text-muted">尚無自己名下的借用紀錄</p>':
     recs.map(r=>`<div style="border:1px solid #e5e7eb;border-radius:7px;padding:9px;margin-bottom:7px">
       <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px">${catBadgeHtml(r.cat)}${statusBadge(computeStatus(r))}${r.taskName?`<span style="font-size:11px;color:#374151">${r.taskName}</span>`:''}</div>
       <div style="font-size:12px">${(r.equipment||[]).map(e=>e.name+'×'+e.qty).join('、')}</div>
