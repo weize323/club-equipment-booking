@@ -1018,7 +1018,7 @@ const server=http.createServer(async(req,res)=>{
       if(!rec)return json(res,404,{error:'紀錄不存在'});
       rec.status='approved';
       if(rec.cat==='task'){
-        const mem=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
+        const mem=findMemberForRecord(rec);
         if(mem) mem.taskCount=(mem.taskCount||0)+1;
       }
       creditRedeem(rec);
@@ -1494,9 +1494,12 @@ const server=http.createServer(async(req,res)=>{
       };
       db.records.unshift(rec);
 
-      let mem=db.members.find(x=>x.sid===rec.sid||x.name===rec.name);
-      if(!mem){mem={id:'m'+Date.now(),name:rec.name,dept:rec.dept,sid:rec.sid,phone:rec.phone,email:rec.email,taskCount:0,isOfficer:false};db.members.push(mem);}
-      else Object.assign(mem,{dept:rec.dept,phone:rec.phone,email:rec.email});
+      // 用學號/姓名/電話計分找出是哪位社員；姓名與學號分別對到不同人時（可能填錯學號）不更新任何人的資料，
+      // 以免把別人的系級/電話/Email 蓋掉，也不新增重複社員（核對已兌換時會列出這類紀錄供修正）。
+      const cands=memberCandidates(rec);
+      let mem=null;
+      if(!cands.length){mem={id:'m'+Date.now(),name:rec.name,dept:rec.dept,sid:rec.sid,phone:rec.phone,email:rec.email,taskCount:0,isOfficer:false};db.members.push(mem);}
+      else if(cands.length===1||cands[0].sc>cands[1].sc){mem=cands[0].m;Object.assign(mem,{dept:rec.dept,phone:rec.phone,email:rec.email});}
       for(const c of rec.collabs){
         if(!c.name)continue;
         let cm=db.members.find(x=>x.name===c.name||(c.sid&&x.sid===c.sid));
