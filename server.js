@@ -287,12 +287,25 @@ function getThreshold(){const n=parseInt(db&&db.redeemThreshold,10);return(n>=1&
 // deleting that record — or changing its category away from 個人借用 — gives the credit back.
 // rec.redeemCounted/redeemMemberId make this exactly reversible and never double-count.
 // Officers are counted the same as everyone else.
-// 紀錄 → 社員：先用學號精確比對；沒有學號/找不到才用姓名，且姓名必須只對應到一位社員（同名多人不亂猜）。
+// 紀錄 → 社員：學號、姓名、電話各算一分，取分數最高且唯一的那位。
+// 例如紀錄的學號屬於 A、姓名卻是 B（B 的電話也吻合）→ 判給 B；若分數打平（無法確定）就回傳 null，不亂猜。
+function memberCandidates(rec){
+  const sid=String(rec.sid||'').trim(),name=String(rec.name||'').trim(),phone=String(rec.phone||'').trim();
+  const out=[];
+  for(const x of db.members){
+    let sc=0;
+    if(sid&&String(x.sid||'').trim()===sid)sc++;
+    if(name&&String(x.name||'').trim()===name)sc++;
+    if(phone&&String(x.phone||'').trim()===phone)sc++;
+    if(sc>0)out.push({m:x,sc});
+  }
+  return out.sort((a,b)=>b.sc-a.sc);
+}
 function findMemberForRecord(rec){
-  const sid=String(rec.sid||'').trim(),name=String(rec.name||'').trim();
-  if(sid){const m=db.members.find(x=>String(x.sid||'').trim()===sid);if(m)return m;}
-  const byName=db.members.filter(x=>String(x.name||'').trim()===name);
-  return byName.length===1?byName[0]:null;
+  const c=memberCandidates(rec);
+  if(!c.length)return null;
+  if(c.length>1&&c[0].sc===c[1].sc)return null;
+  return c[0].m;
 }
 // 幹部是否計入「已兌換」：由管理員在社員管理頁切換（uiPrefs.redeemCountOfficers），預設計入。
 function memberCountsForRedeem(mem){return !!mem&&(!mem.isOfficer||!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers===false));}
@@ -1337,10 +1350,15 @@ const server=http.createServer(async(req,res)=>{
       const rows=new Map(db.members.map(x=>[x.id,{id:x.id,name:x.name,redeemed:x.redeemedCount||0,counted:0,recs:[]}]));
       const eligible=new Map(); // rec -> member
       const excludedNames=new Set();
+      const conflicts=[];
       for(const rec of db.records){
         if(rec.isQuickMark||rec.cat!=='personal'||rec.status==='pending'||rec.status==='rejected')continue;
         const mem=findMemberForRecord(rec);
-        if(!mem)continue;
+        if(!mem){
+          const c=memberCandidates(rec);
+          if(c.length>1)conflicts.push((rec.start||'').slice(0,10)+`：登記名「${rec.name||''}」學號「${rec.sid||''}」，可能是 ${c.filter(x=>x.sc===c[0].sc).map(x=>x.m.name).join(' 或 ')}`);
+          continue;
+        }
         if(!memberCountsForRedeem(mem)){excludedNames.add(mem.name);continue;}
         const row=rows.get(mem.id);row.counted++;
         row.recs.push((rec.start||'').slice(0,10)+(rec.name!==mem.name?`（登記名：${rec.name}）`:''));
@@ -1357,7 +1375,7 @@ const server=http.createServer(async(req,res)=>{
         for(const r of rows.values()){const mem=db.members.find(x=>x.id===r.id);if(mem)mem.redeemedCount=r.counted;}
         writeDB(db);
       }
-      return json(res,200,{ok:true,applied:b.apply===true,moved:[],excluded:[...excludedNames],countOfficers:!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers===false),diffs,members:db.members});
+      return json(res,200,{ok:true,applied:b.apply===true,moved:[],conflicts,excluded:[...excludedNames],countOfficers:!(db.uiPrefs&&db.uiPrefs.redeemCountOfficers===false),diffs,members:db.members});
     }
 
     // ── Admin: set / adjust how many times a member has already redeemed ──
